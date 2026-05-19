@@ -1,0 +1,518 @@
+{% extends "base.html" %}
+{% block title %}Administracija VUS{% endblock %}
+
+{% block head %}
+<style>
+  .admin-wrap { max-width: 1180px; margin: 0 auto; }
+  .card + .card { margin-top: 14px; }
+  .fs-counter { font-size: clamp(2rem, 5vw, 3rem); line-height: 1; font-weight: 650; }
+  #chkResults table td { vertical-align: middle; }
+  .chip{display:inline-block;padding:.15rem .45rem;border:1px solid #e1e5ea;border-radius:.5rem;background:#f8f9fb;font-size:.75rem;color:#333}
+  .status-exists{color:#157347;font-weight:600}
+  .status-missing{color:#dc3545;font-weight:600}
+  .w-85 { width: 85% }
+  textarea.form-control.smallarea { min-height: 42px; }
+  .card-compact .btn{ padding:.15rem .4rem; font-size:.8rem; }
+  .card-compact .small, .card-compact code{ font-size:.85rem; }
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="admin-wrap py-3">
+  {% with messages = get_flashed_messages(with_categories=true) %}
+    {% if messages %}
+      <div class="mt-3">
+        {% for category, msg in messages %}
+          <div class="alert alert-{{ 'danger' if category == 'error' else category }} alert-dismissible fade show" role="alert">
+            {{ msg }}
+            <button type="button" class="btn-close" data-bs-dismiss="alert" aria-label="Zapri"></button>
+          </div>
+        {% endfor %}
+      </div>
+    {% endif %}
+  {% endwith %}
+
+  <h1 class="h5 mb-3">Administracija · VUS</h1>
+
+  <div class="mb-3 d-flex flex-wrap align-items-center gap-2">
+
+   {#
+<!-- GUMB: samo "vpis" -->
+<form method="post" action="{{ url_for('admin_uvoz_cc') }}">
+  <button type="submit" class="btn btn-dark btn-sm">
+    Uvozi iz CC (CSV) – VPIS
+  </button>
+</form>
+
+<!-- GUMB: ALL -->
+<form method="post" action="{{ url_for('admin_uvoz_cc_all') }}">
+  <button type="submit" class="btn btn-outline-danger btn-sm"
+          onclick="return confirm('Res želiš uvoziti VSE vrstice iz CSV (ALL)?');">
+    Uvozi iz CC (CSV) – ALL
+  </button>
+</form>
+
+<small class="form-text text-muted ms-2">
+  VPIS = samo vrstice, kjer je v Citation označeno "vpis"; ALL = brez filtra (vse vrstice).
+</small>
+#}
+
+
+
+    <!-- MINI ŠTEVEC -->
+    <div class="ms-auto d-flex align-items-center gap-2">
+      <span class="badge bg-light text-dark border">
+        Gesel: <span id="stevecAdmin">…</span>
+      </span>
+      <button id="btnRefresh" class="btn btn-outline-secondary btn-sm" type="button">
+        Osveži
+      </button>
+    </div>
+  </div>
+
+  {% if napaka %}
+    <div class="alert alert-warning">Napaka pri dostopu do baze: {{ napaka }}</div>
+  {% endif %}
+
+  <div class="row g-3">
+
+    <!-- LEVO: PREVERI + DODAJ -->
+    <div class="col-12 col-lg-6">
+
+      <!-- PREVERI -->
+      <div class="card">
+        <div class="card-body">
+          <h5 class="card-title">Preveri geslo</h5>
+          <div class="input-group">
+            <input id="chkWord" class="form-control" placeholder="npr. taylor">
+            <button id="btnCheck" class="btn btn-primary" type="button">Preveri</button>
+          </div>
+          <div class="mt-2 small text-muted">
+            Iskanje ne razlikuje velikih/malih črk (NOCASE). Za natančnejšo obdelavo uporabite Napredno ↓
+          </div>
+
+          <!-- Rezultati PREVERI gredo sem -->
+          <div id="chkResults" class="mt-3"></div>
+        </div>
+      </div>
+
+      <!-- DODAJ -->
+<div class="card mt-3">
+  <div class="card-body">
+    <h5 class="card-title">Dodaj geslo</h5>
+
+    <div class="row g-2">
+      <div class="col-12">
+        <label class="form-label">Geslo *</label>
+        <input id="addGeslo" class="form-control" placeholder="obvezno">
+      </div>
+
+      <div class="col-12">
+        <label class="form-label">Razlaga / opis</label>
+        <input id="addRazlaga" class="form-control">
+      </div>
+
+      <div class="col-6 col-md-4">
+        <label class="form-label">Vrsta</label>
+        <input id="addVrsta" class="form-control">
+      </div>
+
+      <div class="col-6 col-md-4">
+        <label class="form-label">Izvor</label>
+        <input id="addIzvor" class="form-control">
+      </div>
+
+      <div class="col-12 col-md-4">
+        <label class="form-label">Tags</label>
+        <input id="addTags" class="form-control" placeholder="npr. oseba, kraj">
+      </div>
+    </div>
+
+    <div class="mt-3 d-flex align-items-center gap-2">
+      <!-- ta ID se ujema s skripto (btnAddGeslo || btnAdd) -->
+      <button id="btnAdd" class="btn btn-success" type="button">Dodaj</button>
+      <span id="addMsg" class="small text-muted"></span>
+    </div>
+  </div>
+</div>
+
+
+
+    <!-- NAPREDNO (celotna širina) -->
+    <div class="col-12">
+      <div class="card mt-3">
+        <div class="card-body">
+          <h5 class="card-title mb-3">Napredno</h5>
+
+          <div class="row g-3">
+
+            <!-- ZAMENJAJ -->
+            <div class="col-12 col-xl-4">
+              <div class="border rounded p-3 h-100">
+                <div class="fw-semibold mb-2">Zamenjaj izraz</div>
+                <div class="mb-2">
+                  <input id="zamenjajFind" class="form-control" placeholder="Najdi (npr. fotograf)">
+                </div>
+                <div class="mb-2">
+                  <input id="zamenjajRepl" class="form-control" placeholder="Zamenjaj z (npr. igralec golfa)">
+                </div>
+                <div class="mb-2">
+                  <select id="zamenjajScope" class="form-select">
+                    <option value="opis">Samo opis/razlaga</option>
+                    <option value="geslo">Samo geslo</option>
+                    <option value="oboje">Oboje</option>
+                  </select>
+                </div>
+                <div class="mb-3">
+                  <select id="zamenjajMode" class="form-select">
+                    <option value="substring">Navadno (substring)</option>
+                    <option value="exact">Točno ujemanje</option>
+                    <option value="word">Cele besede (regex)</option>
+                  </select>
+                </div>
+                <button id="btnZamenjaj" class="btn btn-warning w-100" type="button">Zamenjaj</button>
+                <div id="repMsg" class="small text-muted mt-2"></div>
+              </div>
+            </div>
+
+            <!-- VELIKE / MALE -->
+            <div class="col-12 col-xl-4">
+              <div class="border rounded p-3 h-100">
+                <div class="fw-semibold mb-2">Velike / male črke</div>
+                <div class="mb-2">
+                  <select id="vmTarget" class="form-select">
+                    <option value="geslo">Geslo</option>
+                    <option value="opis">Opis/razlaga</option>
+                    <option value="oboje">Oboje</option>
+                  </select>
+                </div>
+                <div class="mb-3">
+                  <select id="vmMode" class="form-select">
+                    <option value="upper">Vse velike</option>
+                    <option value="lower">Vse male</option>
+                    <option value="title">Naslovi (Title Case)</option>
+                    <option value="capitalize">Prva velika</option>
+                  </select>
+                </div>
+                <button id="btnPretvori" class="btn btn-secondary w-100" type="button">
+                  Pretvori
+                </button>
+                <div id="caseMsg" class="small text-muted mt-2"></div>
+              </div>
+            </div>
+
+            <!-- ARHIVIRAJ MESEC -->
+            <div class="col-12 col-xl-4">
+              <div class="border rounded p-3 h-100">
+                <div class="fw-semibold mb-2">Arhiviraj mesec</div>
+                <div class="row g-2">
+                  <div class="col-6">
+                    <input id="arhYear" class="form-control" type="number" placeholder="Leto (YYYY)">
+                  </div>
+                  <div class="col-6">
+                    <select id="arhMonth" class="form-select">
+                      <option value="1">1</option><option value="2">2</option><option value="3">3</option>
+                      <option value="4">4</option><option value="5">5</option><option value="6">6</option>
+                      <option value="7">7</option><option value="8">8</option><option value="9">9</option>
+                      <option value="10">10</option><option value="11">11</option><option value="12">12</option>
+                    </select>
+                  </div>
+                </div>
+                <button id="btnArhiviraj" class="btn btn-outline-dark w-100 mt-2" type="button">
+                  Arhiviraj
+                </button>
+                <div id="archMsg" class="small text-muted mt-2"></div>
+              </div>
+            </div>
+
+          </div> <!-- /.row g-3 -->
+        </div>
+      </div>
+    </div>
+
+  </div> <!-- /.row g-3 -->
+
+</div> <!-- /.admin-wrap -->
+{% endblock %}
+
+{% block scripts %}
+{{ super() }}
+
+<script>
+// ---------- helpers ----------
+async function jget(url) {
+  const r = await fetch(url, { cache: 'no-store' });
+  if (!r.ok) throw new Error('HTTP ' + r.status);
+  return r.json();
+}
+async function jpost(url, data) {
+  const r = await fetch(url, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(data || {})
+  });
+  if (!r.ok) throw new Error('HTTP ' + r.status);
+  return r.json();
+}
+function esc(s){
+  const d = document.createElement('div');
+  d.innerText = s ?? '';
+  return d.innerHTML;
+}
+
+// ---------- PREVERI: render + UREDI/BRIŠI ----------
+function renderChkResults(rows) {
+  const host = document.getElementById('chkResults');
+  if (!host) return;
+
+  if (!rows || rows.length === 0) {
+    host.innerHTML = '<div class="text-muted">Ni zadetkov.</div>';
+    return;
+  }
+
+  const html = [
+    '<div class="table-responsive">',
+    '<table class="table table-sm align-middle">',
+    '<thead><tr><th style="width:1%">#</th><th>Geslo</th><th>Razlaga</th><th class="text-nowrap">Akcije</th></tr></thead><tbody>'
+  ];
+
+  for (const r of rows) {
+    html.push(
+      `<tr data-id="${r.id}">
+         <td class="text-muted">${r.id}</td>
+         <td class="w-25">
+           <input class="form-control form-control-sm js-g" value="${esc(r.geslo || '')}">
+         </td>
+         <td>
+           <textarea class="form-control form-control-sm smallarea js-r">${esc(r.razlaga || '')}</textarea>
+         </td>
+         <td class="text-nowrap">
+           <button class="btn btn-sm btn-outline-primary me-1 js-save">UREDI</button>
+           <button class="btn btn-sm btn-outline-danger js-del">BRIŠI</button>
+         </td>
+       </tr>`
+    );
+  }
+  html.push('</tbody></table></div>');
+  host.innerHTML = html.join('');
+
+  // UREDI
+  host.querySelectorAll('.js-save').forEach(btn => {
+    btn.addEventListener('click', async (e) => {
+      const tr = e.target.closest('tr');
+      const id = Number(tr.dataset.id);
+      const g  = tr.querySelector('.js-g').value.trim();
+      const r  = tr.querySelector('.js-r').value;
+      try {
+        const res = await jpost('/api/uredi_geslo', { id, geslo: g, razlaga: r });
+        if (!res.ok) throw new Error(res.msg || 'Napaka pri shranjevanju');
+        tr.classList.add('table-success');
+        setTimeout(() => tr.classList.remove('table-success'), 900);
+      } catch(err) { alert(err.message || err); }
+    });
+  });
+
+  // BRIŠI
+  host.querySelectorAll('.js-del').forEach(btn => {
+    btn.addEventListener('click', async (e) => {
+      const tr = e.target.closest('tr');
+      const id = Number(tr.dataset.id);
+      if (!confirm('Res želiš izbrisati zapis #' + id + '?')) return;
+      try {
+        const res = await jpost('/api/brisi_geslo', { id });
+        if (!res.ok) throw new Error(res.msg || 'Napaka pri brisanju');
+        tr.remove();
+      } catch(err) { alert(err.message || err); }
+    });
+  });
+}
+
+// ---------- PREVERI: klik + Enter ----------
+(function () {
+  const input = document.getElementById('chkWord');
+  const btn   = document.getElementById('btnCheck');
+  const host  = document.getElementById('chkResults');
+
+  async function doCheck() {
+    const q = (input?.value || '').trim();
+    if (!q) {
+      host.innerHTML = '<div class="text-muted">Vpiši geslo.</div>';
+      return;
+    }
+
+    try {
+      // nova logika: uporabimo /api/gesla_admin, ki vrne vse zapise + razlago
+      const data = await jget('/api/gesla_admin?geslo=' + encodeURIComponent(q));
+      if (data.ok === false) throw new Error(data.msg || 'Napaka');
+
+      const rows = data.results || [];
+
+      let status = document.getElementById('chkStatus');
+      if (!status) {
+        status = document.createElement('div');
+        status.id = 'chkStatus';
+        status.className = 'mt-2 small';
+        host.before(status);
+      }
+
+      if (!rows.length) {
+        status.className = 'mt-2 small text-danger';
+        status.textContent = 'Ni natančnega zadetka.';
+        host.innerHTML = '<div class="text-muted">Ni zadetkov.</div>';
+        return;
+      }
+
+      status.className = 'mt-2 small text-success';
+      status.textContent = `Najdenih zapisov: ${rows.length}. Iskanje ne razlikuje velikih/malih črk (NOCASE).`;
+      renderChkResults(rows);
+    } catch (e) {
+      host.innerHTML = '<div class="text-danger">Napaka: ' + (e.message || e) + '</div>';
+    }
+  }
+
+  btn?.addEventListener('click', doCheck);
+  input?.addEventListener('keydown', (e) => {
+    if (e.key === 'Enter') {
+      e.preventDefault();
+      doCheck();
+    }
+  });
+
+  // expose doCheck globalno, če boš kdaj hotel refreshat po dodajanju
+  window.__adminDoCheck = doCheck;
+})();
+
+// ---------- ŠTEVEC ----------
+async function loadStevec() {
+  const box = document.getElementById('stevecAdmin');
+  if (!box) return;
+  box.textContent = '…';
+  try {
+    const r1 = await fetch('/stevec_gesel', { cache: 'no-store' });
+    if (r1.ok) {
+      const j = await r1.json();
+      const n = Number(j?.count ?? j?.total ?? j?.n ?? 0);
+      if (!Number.isNaN(n) && n > 0) {
+        box.textContent = n.toLocaleString('sl-SI');
+        return;
+      }
+    }
+    const r2 = await fetch('/stevec_gesel.txt', { cache: 'no-store' });
+    const t = r2.ok ? await r2.text() : '0';
+    const n2 = parseInt(t, 10) || 0;
+    box.textContent = n2.toLocaleString('sl-SI');
+  } catch {
+    box.textContent = '—';
+  }
+}
+document.getElementById('btnRefresh')?.addEventListener('click', (e) => {
+  e.preventDefault();
+  loadStevec();
+});
+document.addEventListener('DOMContentLoaded', loadStevec);
+
+// ---------- NAPREDNO: Velike/male ----------
+document.getElementById('btnPretvori')?.addEventListener('click', async () => {
+  const body = {
+    target: document.getElementById('vmTarget').value,
+    mode:   document.getElementById('vmMode').value
+  };
+  const box = document.getElementById('caseMsg');
+  box.textContent = 'Delam…';
+  try {
+    const r = await jpost('/api/velike_male', body);
+    if (r.ok) box.textContent = `Spremenjeno ${r.changed} zapisov.`;
+    else      box.textContent = 'Napaka: ' + (r.msg || '?');
+  } catch(e){
+    box.textContent = 'Napaka: ' + (e.message || e);
+  }
+});
+
+// ---------- NAPREDNO: Arhiviraj ----------
+document.getElementById('btnArhiviraj')?.addEventListener('click', async () => {
+  const year  = document.getElementById('arhYear').value.trim();
+  const month = parseInt(document.getElementById('arhMonth').value, 10);
+  const box = document.getElementById('archMsg');
+  if (!/^\d{4}$/.test(year) || !(month >= 1 && month <= 12)) {
+    box.textContent = 'Vnesi pravilno leto (YYYY) in mesec (1–12).';
+    return;
+  }
+  box.textContent = 'Premikam datoteke…';
+  try {
+    const r = await jpost('/admin/arhiviraj', { year, month });
+    if (r.ok) box.textContent = `Arhivirano datotek: ${r.moved}.`;
+    else      box.textContent = 'Napaka: ' + (r.msg || '?');
+  } catch(e){
+    box.textContent = 'Napaka: ' + (e.message || e);
+  }
+});
+
+// ---------- DODAJ GESLO ----------
+(function () {
+  const btn = document.getElementById('btnAddGeslo') || document.getElementById('btnAdd');
+  if (!btn) return;
+
+  const inpG = document.getElementById('addWord') || document.getElementById('addGeslo');
+  const inpR = document.getElementById('addRazlaga');
+  const inpV = document.getElementById('addVrsta');
+  const inpI = document.getElementById('addIzvor');
+  const inpT = document.getElementById('addTags');
+  const msgBox = document.getElementById('addMsg');
+
+  btn.addEventListener('click', async () => {
+    const geslo = (inpG?.value || '').trim();
+    const razl  = (inpR?.value || '').trim();
+    const vrsta = (inpV?.value || '').trim();
+    const izvor = (inpI?.value || '').trim();
+    const tags  = (inpT?.value || '').trim();
+
+    if (!geslo) {
+      alert('Najprej vpiši geslo.');
+      return;
+    }
+
+    if (msgBox) msgBox.textContent = 'Shranjujem…';
+
+    try {
+      const res = await jpost('/api/dodaj_geslo', {
+        geslo: geslo,
+        opis: razl,
+        vrsta: vrsta,
+        izvor: izvor,
+        tags: tags
+      });
+      if (!res.ok) throw new Error(res.msg || 'Napaka pri dodajanju.');
+
+      if (msgBox) msgBox.textContent = `Dodano geslo #${res.id}: ${geslo}`;
+
+      if (inpR) inpR.value = '';
+      if (inpV) inpV.value = '';
+      if (inpI) inpI.value = '';
+      if (inpT) inpT.value = '';
+
+      const counter = document.getElementById('stevecAdmin');
+      if (counter) {
+        const raw = (counter.textContent || '').replace(/\./g, '').replace(/\s/g, '');
+        const cur = parseInt(raw, 10);
+        const next = (Number.isFinite(cur) ? cur + 1 : 1);
+        counter.textContent = next.toLocaleString('sl-SI');
+      }
+
+      if (typeof loadStevec === 'function') {
+        loadStevec();
+      }
+
+      if (window.__adminDoCheck && document.getElementById('chkWord')) {
+        document.getElementById('chkWord').value = geslo;
+        window.__adminDoCheck();
+      }
+    } catch (e) {
+      if (msgBox) msgBox.textContent = 'Napaka: ' + (e.message || e);
+      else alert(e.message || e);
+    }
+  });
+})();   // <--- TOLE JE MANJKALO
+
+</script>
+</div>
+{% endblock %}
