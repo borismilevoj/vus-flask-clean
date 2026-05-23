@@ -951,6 +951,7 @@ def krizanka_alias(datum):
 
 @app.get("/arhiv-krizank", endpoint="arhiv_krizank")
 def arhiv_krizank():
+    return redirect(url_for("krizanka"))
     """
     Arhiv križank – bere vse *.js v static/Krizanke/CrosswordCompilerApp/** (tudi v podmapah YYYY-MM)
     in servira templatu arhiv.html (tip='krizanke').
@@ -1052,12 +1053,15 @@ def arhiv_sudoku_pregled(tezavnost):
     datumi = []
     if root.exists():
         for p in root.rglob("*.js"):
-            stem = p.stem  # pričakujemo "YYYY-MM-DD"
+            stem = p.stem  # pričakujemo YYYY-MM-DD
             try:
                 dt = datetime.strptime(stem, "%Y-%m-%d").date()
-                datumi.append(dt)
+
+                # prikaži samo današnje ali starejše križanke
+                if dt <= date.today():
+                    datumi.append(dt)
+
             except ValueError:
-                # ignoriraj vse "Sudoku_*_YYYY-MM-DD" ipd. če so se kdaj pojavili
                 continue
 
     today = date.today()
@@ -1267,7 +1271,6 @@ def make_image_basename_from_opis(opis: str, dodatno: str = "") -> str:
 
 from pathlib import Path
 
-from pathlib import Path
 
 def image_url_for_clue(opis: str, dodatno: str = "", prefer_ext: str = ".jpg") -> str:
     """
