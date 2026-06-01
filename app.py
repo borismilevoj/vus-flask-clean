@@ -952,10 +952,7 @@ def krizanka_alias(datum):
 @app.get("/arhiv-krizank", endpoint="arhiv_krizank")
 def arhiv_krizank():
     return redirect(url_for("krizanka"))
-    """
-    Arhiv križank – bere vse *.js v static/Krizanke/CrosswordCompilerApp/** (tudi v podmapah YYYY-MM)
-    in servira templatu arhiv.html (tip='krizanke').
-    """
+
     root = Path(app.static_folder) / "Krizanke" / "CrosswordCompilerApp"
 
     datumi = []
