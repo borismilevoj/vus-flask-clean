@@ -184,20 +184,26 @@
   </div>
 
   <!-- Križanke -->
-  <div class="vus-card">
-    <div>
-      <div class="vus-chip vus-chip-blue">Križanke</div>
-      <h3>Današnja in arhiv križank</h3>
-      <p>
-        Rešuj aktualno križanko ali pobrskaj po arhivu. Gesla so povezana z VUS bazo,
-        zato dobiš bogate opise in slike.
-      </p>
+<div class="vus-card">
+  <div>
+    <div class="vus-chip vus-chip-blue">Križanke</div>
+    <h3>Današnja križanka</h3>
+    <p>
+      Rešuj aktualno križanko. Gesla so povezana z VUS bazo,
+      zato dobiš bogate opise in slike.
+    </p>
+  </div>
+
+  <div class="d-flex justify-content-between align-items-center">
+    <div class="btn-group btn-group-sm">
+      <a href="{{ url_for('krizanka') }}" class="btn btn-outline-primary">
+        Današnja
+      </a>
     </div>
-    <div class="d-flex justify-content-between align-items-center">
-      <div class="btn-group btn-group-sm">
-        <a href="{{ url_for('krizanka') }}" class="btn btn-outline-primary">
-          Današnja
-        </a>
+
+    <small>Klasika + skandinavski stil</small>
+  </div>
+</div>
 
       </div>
       <small>Klasika + skandinavski stil</small>
