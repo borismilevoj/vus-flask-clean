@@ -948,11 +948,6 @@ def krizanka_alias(datum):
     # pričakujemo datum v obliki YYYY-MM-DD
     return redirect(url_for("krizanka", d=datum))
 
-
-@app.get("/arhiv-krizank", endpoint="arhiv_krizank")
-def arhiv_krizank():
-    return redirect(url_for("krizanka"))
-
     root = Path(app.static_folder) / "Krizanke" / "CrosswordCompilerApp"
 
     datumi = []
