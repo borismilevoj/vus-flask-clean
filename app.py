@@ -1495,10 +1495,33 @@ def api_dodaj_geslo():
     except Exception as e:
         return jsonify(ok=False, msg=str(e)), 500
 
-@app.get("/prispevaj", endpoint="prispevaj_geslo")
+@app.route("/prispevaj", methods=["GET", "POST"], endpoint="prispevaj_geslo")
 def prispevaj_geslo():
-    return "Prispevaj geslo je trenutno začasno izklopljeno."
+    if request.method == "POST":
+        uporabnik = (request.form.get("uporabnik") or "").strip()
+        geslo = (request.form.get("geslo") or "").strip()
+        opis = (request.form.get("opis") or "").strip()
 
+        if not geslo or not opis:
+            return render_template(
+                "prispevaj.html",
+                sporocilo="Vnesi geslo in opis."
+            )
+
+        # za zdaj predlog samo shranimo v tekstovno datoteko
+        with open("prispevki.txt", "a", encoding="utf-8") as f:
+            f.write(f"{datetime.now().isoformat()} | {uporabnik} | {geslo} | {opis}\n")
+
+        return render_template(
+            "prispevaj.html",
+            sporocilo="Hvala! Tvoj predlog je bil uspešno oddan."
+        )
+
+    return render_template("prispevaj.html")
+
+@app.route("/sitemap.xml")
+def sitemap():
+    return send_from_directory("static", "sitemap.xml")
 
 @app.get("/preveri_slika")
 def preveri_slika():
@@ -1589,6 +1612,7 @@ def api_preveri_sliko():
 @app.post("/api/upload_sliko")
 def api_upload_sliko():
     import os
+    import shutil
     from flask import request, jsonify
 
     file = request.files.get("file")
@@ -1596,10 +1620,10 @@ def api_upload_sliko():
 
     if not file:
         return jsonify({"ok": False, "error": "Ni datoteke."})
+
     if not filename:
         return jsonify({"ok": False, "error": "Manjka ime datoteke."})
 
-    # če ni končnice, jo dodamo iz originalnega imena
     if "." not in filename:
         ext = os.path.splitext(file.filename)[1].lower()
         if ext:
@@ -1609,6 +1633,11 @@ def api_upload_sliko():
     os.makedirs(save_dir, exist_ok=True)
 
     save_path = os.path.join(save_dir, filename)
+
+    if os.path.exists(save_path):
+        backup_path = save_path + ".bak"
+        shutil.copy2(save_path, backup_path)
+
     file.save(save_path)
 
     preview_url = f"/static/Images/{filename}"
@@ -1616,7 +1645,7 @@ def api_upload_sliko():
     return jsonify({
         "ok": True,
         "filename": filename,
-        "preview_url": preview_url
+        "url": preview_url
     })
 
 
