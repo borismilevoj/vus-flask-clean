@@ -30,4 +30,4 @@ out/
 _old/
 prispevki.txt
 static/Images/*
-prispevki.txt
+!static/Images/.gitkeep
