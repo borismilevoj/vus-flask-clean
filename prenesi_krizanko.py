@@ -135,7 +135,7 @@ def transfer_crossword(date_str: str):
 
     copied = 0
     missing = []
-
+    used_files = set()
     for opis, dodatno in pairs:
         found = False
 
@@ -144,6 +144,9 @@ def transfer_crossword(date_str: str):
             if src.exists():
                 dst = NEW_IMAGES / fname
                 copy_file(src, dst)
+
+                used_files.add(fname)
+
                 copied += 1
                 found = True
                 break
@@ -158,11 +161,71 @@ def transfer_crossword(date_str: str):
     print(f"Kopiranih slik: {copied}")
     print(f"Manjkajočih slik: {len(missing)}")
 
+    print()
+    print("Čiščenje nepotrebnih slik ...")
+
+    deleted = 0
+
+    for p in NEW_IMAGES.iterdir():
+        if not p.is_file():
+            continue
+
+        if p.name.endswith(".bak"):
+            continue
+
+        if p.name not in used_files:
+            p.unlink()
+            deleted += 1
+            print("IZBRISANA:", p.name)
+
+    print()
+    print(f"Izbrisanih nepotrebnih slik: {deleted}")
+
+    MAX_MISSING = 40
+
+    print()
+    print("------ POVZETEK ------")
+    print(f"Datum: {date_str}")
+    print(f"Najdenih opisov: {len(pairs)}")
+    print(f"Kopiranih slik: {copied}")
+    print(f"Manjkajočih slik: {len(missing)}")
+
     if missing:
         print()
-        print("Prvih 20 manjkajočih:")
-        for m in missing[:20]:
+        print(f"Prvih {MAX_MISSING} manjkajočih:")
+        for m in missing[:MAX_MISSING]:
             print("-", m)
+
+    print()
+    print("Čiščenje nepotrebnih slik ...")
+
+    deleted = 0
+
+    for p in NEW_IMAGES.iterdir():
+        if not p.is_file():
+            continue
+
+        if p.name.endswith(".bak"):
+            continue
+
+        if p.name not in used_files:
+            p.unlink()
+            deleted += 1
+            print("IZBRISANA:", p.name)
+
+    print()
+    print(f"Izbrisanih nepotrebnih slik: {deleted}")
+
+    print()
+    print("------ GIT UKAZI ------")
+    print(f"git add static/Krizanke/CrosswordCompilerApp/{ym}/{date_str}.xml")
+    print(f"git add static/Krizanke/CrosswordCompilerApp/{ym}/{date_str}.js")
+    print("git add static/Images")
+
+    print()
+    print(f'git commit -m "dodaj krizanko {date_str}"')
+    print("git push")
+
 
 
 if __name__ == "__main__":
