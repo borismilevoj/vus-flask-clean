@@ -161,25 +161,25 @@ def transfer_crossword(date_str: str):
     print(f"Kopiranih slik: {copied}")
     print(f"Manjkajočih slik: {len(missing)}")
 
-    print()
-    print("Čiščenje nepotrebnih slik ...")
-
-    deleted = 0
-
-    for p in NEW_IMAGES.iterdir():
-        if not p.is_file():
-            continue
-
-        if p.name.endswith(".bak"):
-            continue
-
-        if p.name not in used_files:
-            p.unlink()
-            deleted += 1
-            print("IZBRISANA:", p.name)
-
-    print()
-    print(f"Izbrisanih nepotrebnih slik: {deleted}")
+    # print()
+    # print("Čiščenje nepotrebnih slik ...")
+    #
+    # deleted = 0
+    #
+    # for p in NEW_IMAGES.iterdir():
+    #     if not p.is_file():
+    #         continue
+    #
+    #     if p.name.endswith(".bak"):
+    #         continue
+    #
+    #     if p.name not in used_files:
+    #         p.unlink()
+    #         deleted += 1
+    #         print("IZBRISANA:", p.name)
+    #
+    # print()
+    # print(f"Izbrisanih nepotrebnih slik: {deleted}")
 
     MAX_MISSING = 40
 
@@ -196,25 +196,6 @@ def transfer_crossword(date_str: str):
         for m in missing[:MAX_MISSING]:
             print("-", m)
 
-    print()
-    print("Čiščenje nepotrebnih slik ...")
-
-    deleted = 0
-
-    for p in NEW_IMAGES.iterdir():
-        if not p.is_file():
-            continue
-
-        if p.name.endswith(".bak"):
-            continue
-
-        if p.name not in used_files:
-            p.unlink()
-            deleted += 1
-            print("IZBRISANA:", p.name)
-
-    print()
-    print(f"Izbrisanih nepotrebnih slik: {deleted}")
 
     print()
     print("------ GIT UKAZI ------")
