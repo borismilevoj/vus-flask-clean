@@ -468,7 +468,7 @@ document.addEventListener('click', function(e){
 
   flipDir();
   focusWordHere();
-  if (grid) grid.focus({ preventScroll: true });
+  //if (grid) grid.focus({ preventScroll: true });//
 }, true);
 
 // začetni prikaz
@@ -631,7 +631,15 @@ updateToggleButton();
     highlight(c.cells, window.cursor);
     showClueAtHead(c.sx, c.sy, dir);
     updateFrameBorder();
-  }
+
+    var inp = document.querySelector(
+      'input[data-x="' + window.cursor.x + '"][data-y="' + window.cursor.y + '"]'
+    );
+
+    if (inp) {
+      inp.focus({ preventScroll: true });
+    }
+}
 
   function setLetterAt(x, y, ch, silent){
     var cell = (cellRefs[y] || [])[x];
