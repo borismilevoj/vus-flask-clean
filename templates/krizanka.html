@@ -436,6 +436,36 @@ window.addEventListener('DOMContentLoaded', function () {
       cellRefs[y][x] = cell;
     }
   }
+  // ===== SKRITI INPUT ZA MOBILNO TIPKOVNICO =====
+  var mobileInput = document.createElement('input');
+  mobileInput.type = 'text';
+  mobileInput.autocapitalize = 'characters';
+  mobileInput.autocomplete = 'off';
+  mobileInput.autocorrect = 'off';
+  mobileInput.spellcheck = false;
+
+  mobileInput.style.position = 'fixed';
+  mobileInput.style.left = '-1000px';
+  mobileInput.style.top = '0';
+  mobileInput.style.width = '1px';
+  mobileInput.style.height = '1px';
+  mobileInput.style.opacity = '0';
+
+  document.body.appendChild(mobileInput);
+
+  mobileInput.addEventListener('input', function () {
+    if (!window.cursor) return;
+
+    var v = mobileInput.value;
+    if (!v) return;
+
+    var ch = v.slice(-1);
+    mobileInput.value = '';
+
+    setLetterAt(window.cursor.x, window.cursor.y, ch, false);
+    moveWithinWord(true, true);
+    focusWordHere();
+  });
 
   // ===== 4) FUNKCIJE =====
   var dir = 'across';
@@ -612,33 +642,29 @@ updateToggleButton();
   }
 
   function focusWordHere(){
-    if (!window.cursor) return;
+  if (!window.cursor) return;
 
-    var c = clampWord(window.cursor.x, window.cursor.y, dir);
-    var keyHead = c.sx + "," + c.sy;
+  var c = clampWord(window.cursor.x, window.cursor.y, dir);
+  var keyHead = c.sx + "," + c.sy;
 
-    var hasAcross = clueAtHead.has(keyHead + ",across");
-    var hasDown   = clueAtHead.has(keyHead + ",down");
+  var hasAcross = clueAtHead.has(keyHead + ",across");
+  var hasDown   = clueAtHead.has(keyHead + ",down");
 
-    if (dir === "across" && !hasAcross && hasDown) {
-      dir = "down";
-      c = clampWord(window.cursor.x, window.cursor.y, dir);
-    } else if (dir === "down" && !hasDown && hasAcross) {
-      dir = "across";
-      c = clampWord(window.cursor.x, window.cursor.y, dir);
-    }
+  if (dir === "across" && !hasAcross && hasDown) {
+    dir = "down";
+    c = clampWord(window.cursor.x, window.cursor.y, dir);
+  } else if (dir === "down" && !hasDown && hasAcross) {
+    dir = "across";
+    c = clampWord(window.cursor.x, window.cursor.y, dir);
+  }
 
-    highlight(c.cells, window.cursor);
-showClueAtHead(c.sx, c.sy, dir);
-updateFrameBorder();
+  highlight(c.cells, window.cursor);
+  showClueAtHead(c.sx, c.sy, dir);
+  updateFrameBorder();
 
-var inp = document.querySelector(
-  'input[data-x="' + window.cursor.x + '"][data-y="' + window.cursor.y + '"]'
-);
-
-if (inp) {
-  inp.focus({ preventScroll: true });
-}
+  if (mobileInput) {
+    mobileInput.focus({ preventScroll: true });
+  }
 }
 
   function setLetterAt(x, y, ch, silent){
