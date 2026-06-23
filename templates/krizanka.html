@@ -629,16 +629,16 @@ updateToggleButton();
     }
 
     highlight(c.cells, window.cursor);
-    showClueAtHead(c.sx, c.sy, dir);
-    updateFrameBorder();
+showClueAtHead(c.sx, c.sy, dir);
+updateFrameBorder();
 
-    var inp = document.querySelector(
-      'input[data-x="' + window.cursor.x + '"][data-y="' + window.cursor.y + '"]'
-    );
+var inp = document.querySelector(
+  'input[data-x="' + window.cursor.x + '"][data-y="' + window.cursor.y + '"]'
+);
 
-    if (inp) {
-      inp.focus({ preventScroll: true });
-    }
+if (inp) {
+  inp.focus({ preventScroll: true });
+}
 }
 
   function setLetterAt(x, y, ch, silent){
