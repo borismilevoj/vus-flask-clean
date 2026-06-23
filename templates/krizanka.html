@@ -491,11 +491,17 @@ cellRefs[y][x] = cell;
     if (!v) return;
 
     var ch = v.slice(-1);
-    mobileInput.value = '';
+mobileInput.value = '';
 
-    setLetterAt(window.cursor.x, window.cursor.y, ch, false);
-    moveWithinWord(true, true);
-    focusWordHere();
+if (ch === 'x' || ch === 'X') {
+  setLetterAt(window.cursor.x, window.cursor.y, '', false);
+  focusWordHere();
+  return;
+}
+
+setLetterAt(window.cursor.x, window.cursor.y, ch, false);
+moveWithinWord(true, true);
+focusWordHere();
   });
 
   // ===== 4) FUNKCIJE =====
