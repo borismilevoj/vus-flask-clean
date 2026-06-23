@@ -432,6 +432,37 @@ window.addEventListener('DOMContentLoaded', function () {
       cell.dataset.x = x;
       cell.dataset.y = y;
 
+if (!isBlack) {
+  cell.addEventListener('touchstart', function () {
+    window.cursor = {
+      x: parseInt(this.dataset.x, 10),
+      y: parseInt(this.dataset.y, 10)
+    };
+
+    focusWordHere();
+
+    if (mobileInput) {
+      mobileInput.focus();
+    }
+  }, { passive: true });
+
+  cell.addEventListener('click', function () {
+    window.cursor = {
+      x: parseInt(this.dataset.x, 10),
+      y: parseInt(this.dataset.y, 10)
+    };
+
+    focusWordHere();
+
+    if (mobileInput) {
+      mobileInput.focus();
+    }
+  });
+}
+
+grid.appendChild(cell);
+cellRefs[y][x] = cell;
+
       grid.appendChild(cell);
       cellRefs[y][x] = cell;
     }
