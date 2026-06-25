@@ -491,21 +491,34 @@ cellRefs[y][x] = cell;
 
   document.body.appendChild(mobileInput);
 
-  mobileInput.addEventListener('input', function () {
-    if (!window.cursor) return;
+mobileInput.addEventListener('input', function () {
+  if (!window.cursor) return;
 
-    var v = mobileInput.value;
-    if (!v) return;
+  var v = mobileInput.value;
+  if (!v) return;
 
-    var ch = v.slice(-1);
-mobileInput.value = '';
+  var ch = v.slice(-1);
+  mobileInput.value = '';
 
-if (ch === 'x' || ch === 'X') {
-  setLetterAt(window.cursor.x, window.cursor.y, '', false);
+  setLetterAt(window.cursor.x, window.cursor.y, ch, false);
+  moveWithinWord(true, true);
   focusWordHere();
-  return;
-}
+});
 
+mobileInput.addEventListener('keydown', function (e) {
+  if (!window.cursor) return;
+
+  if (e.key === 'Backspace' || e.key === 'Delete') {
+    if (hasLetter(window.cursor.x, window.cursor.y)) {
+      setLetterAt(window.cursor.x, window.cursor.y, '', false);
+    } else if (moveWithinWord(false, false)) {
+      setLetterAt(window.cursor.x, window.cursor.y, '', false);
+    }
+
+    focusWordHere();
+    e.preventDefault();
+  }
+});
 setLetterAt(window.cursor.x, window.cursor.y, ch, false);
 moveWithinWord(true, true);
 focusWordHere();
