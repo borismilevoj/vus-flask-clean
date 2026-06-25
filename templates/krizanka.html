@@ -433,7 +433,10 @@ window.addEventListener('DOMContentLoaded', function () {
       cell.dataset.y = y;
 
 if (!isBlack) {
-  cell.addEventListener('touchstart', function () {
+
+  cell.addEventListener('touchstart', function (e) {
+    e.preventDefault();
+
     window.cursor = {
       x: parseInt(this.dataset.x, 10),
       y: parseInt(this.dataset.y, 10)
@@ -444,9 +447,11 @@ if (!isBlack) {
     if (mobileInput) {
       mobileInput.focus();
     }
-  }, { passive: true });
+
+  }, { passive: false });
 
   cell.addEventListener('click', function () {
+
     window.cursor = {
       x: parseInt(this.dataset.x, 10),
       y: parseInt(this.dataset.y, 10)
@@ -457,7 +462,9 @@ if (!isBlack) {
     if (mobileInput) {
       mobileInput.focus();
     }
+
   });
+
 }
 
 grid.appendChild(cell);
