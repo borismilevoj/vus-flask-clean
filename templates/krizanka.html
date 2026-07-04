@@ -541,20 +541,22 @@ function flipDir(){               // <-- pomembno: IME flipDir(), ne window.flip
   console.log('[toggleDir] dir ->', dir);
 }
 
-// klik samo na gumb (delegation – robustno)
-document.addEventListener('click', function(e){
-  var el = e.target;
-  var b = (el && el.id === 'toggleDir') ? el
-        : (el && el.closest ? el.closest('#toggleDir') : null);
-  if (!b) return;
+var toggleBtn = document.getElementById('toggleDir');
 
-  e.preventDefault();
-  e.stopPropagation();
+if (toggleBtn) {
+  toggleBtn.addEventListener('pointerdown', function(e) {
+    e.preventDefault();
+    e.stopPropagation();
 
-  flipDir();
-  focusWordHere();
-  //if (grid) grid.focus({ preventScroll: true });//
-}, true);
+    flipDir();
+    focusWordHere();
+  });
+
+  toggleBtn.addEventListener('click', function(e) {
+    e.preventDefault();
+    e.stopPropagation();
+  });
+}
 
 // začetni prikaz
 updateToggleButton();
