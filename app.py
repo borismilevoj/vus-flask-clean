@@ -4,6 +4,7 @@ from __future__ import annotations
 # --- Stdlib
 import io
 import os
+import shutil
 import re
 import sqlite3
 import threading
@@ -12,7 +13,8 @@ import unicodedata
 from datetime import date, datetime, timedelta
 from functools import wraps
 from pathlib import Path
-
+import re
+import unicodedata
 # --- Flask / 3rd-party
 from flask import (
     Flask,
@@ -381,6 +383,39 @@ def debug_krizanke():
 def isci_vzorec_page():
     return render_template("isci_vzorec.html")
 
+
+
+STOP_BESEDE = {
+    "in", "ali", "je", "so", "ki", "se", "na", "v", "iz",
+    "za", "od", "do", "pri", "po", "s", "z", "ter"
+}
+
+
+def normaliziraj_iskanje(text):
+    """Male črke, brez šumnikov in odvečnih ločil."""
+    text = (text or "").strip().lower()
+
+    text = unicodedata.normalize("NFD", text)
+    text = "".join(
+        znak for znak in text
+        if not unicodedata.combining(znak)
+    )
+
+    text = re.sub(r"[^a-z0-9]+", " ", text)
+    return re.sub(r"\s+", " ", text).strip()
+
+
+def razdeli_iskanje(text):
+    """Vrne pomembne besede iz dodatnega iskalnega izraza."""
+    norm = normaliziraj_iskanje(text)
+
+    return [
+        beseda
+        for beseda in norm.split()
+        if len(beseda) >= 2 and beseda not in STOP_BESEDE
+    ]
+
+
 @app.post("/isci_vzorec", endpoint="isci_vzorec_api")
 def isci_vzorec_api():
     """
@@ -407,6 +442,7 @@ def isci_vzorec_api():
         like = vzorec  # '_' je wildcard za en znak v LIKE
 
         con = get_conn(readonly=True)
+        con.create_function("NORM", 1, normaliziraj_iskanje)
         cur = con.cursor()
 
         table = "slovar_sortiran"
@@ -464,14 +500,15 @@ def isci_vzorec_api():
             sql += f" AND LENGTH({norm_geslo}) = ?"
             params.append(dolzina)
 
-        # dodatni filter (v praksi po opisu)
+        # Dodatni filter: vse pomembne besede, ne glede na vrstni red
         if dodatno:
-            # če imamo pravi stolpec za opis, filtriraj po njem
-            if desc_col != "''":
-                sql += f" AND {desc_col} LIKE ? COLLATE NOCASE"
-            else:
-                sql += f" AND {geslo_col} LIKE ? COLLATE NOCASE"
-            params.append(f"%{dodatno}%")
+            iskane_besede = razdeli_iskanje(dodatno)
+
+            iskani_stolpec = desc_col if desc_col != "''" else geslo_col
+
+            for beseda in iskane_besede:
+                sql += f" AND NORM({iskani_stolpec}) LIKE ?"
+                params.append(f"%{beseda}%")
 
         # --- SORT: za isto geslo razvrsti PO IMENU ZA ' - ' ---
         # 1) has_dash: najprej tisti, ki imajo " - "
@@ -1613,6 +1650,7 @@ def api_preveri_sliko():
 def api_upload_sliko():
     import os
     import shutil
+    from pathlib import Path
     from flask import request, jsonify
 
     file = request.files.get("file")
@@ -1639,6 +1677,17 @@ def api_upload_sliko():
         shutil.copy2(save_path, backup_path)
 
     file.save(save_path)
+
+    # Trajni lokalni arhiv v vus-flask2
+    if os.name == "nt":
+        archive_dir = Path(
+            r"C:\Users\bormi\Documents\vus-flask2\static\Images"
+        )
+
+        if archive_dir.exists():
+            archive_path = archive_dir / filename
+            shutil.copy2(save_path, archive_path)
+            print("ARHIVSKA KOPIJA:", archive_path)
 
     preview_url = f"/static/Images/{filename}"
 
