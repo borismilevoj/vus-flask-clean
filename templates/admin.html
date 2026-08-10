@@ -36,28 +36,17 @@
 
   <div class="mb-3 d-flex flex-wrap align-items-center gap-2">
 
-   {#
-<!-- GUMB: samo "vpis" -->
-<form method="post" action="{{ url_for('admin_uvoz_cc') }}">
-  <button type="submit" class="btn btn-dark btn-sm">
-    Uvozi iz CC (CSV) – VPIS
-  </button>
+
+<form method="post"
+      action="{{ url_for('admin_uvoz_cc_all') }}"
+      onsubmit="return confirm('Uvozim celoten CC CSV v VUS.db? Postopek lahko traja nekaj časa.');"
+      style="margin: 15px 0;">
+
+    <button type="submit" class="btn btn-primary">
+        UVOZI GESLA IZ CC
+    </button>
+
 </form>
-
-<!-- GUMB: ALL -->
-<form method="post" action="{{ url_for('admin_uvoz_cc_all') }}">
-  <button type="submit" class="btn btn-outline-danger btn-sm"
-          onclick="return confirm('Res želiš uvoziti VSE vrstice iz CSV (ALL)?');">
-    Uvozi iz CC (CSV) – ALL
-  </button>
-</form>
-
-<small class="form-text text-muted ms-2">
-  VPIS = samo vrstice, kjer je v Citation označeno "vpis"; ALL = brez filtra (vse vrstice).
-</small>
-#}
-
-
 
     <!-- MINI ŠTEVEC -->
     <div class="ms-auto d-flex align-items-center gap-2">
