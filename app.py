@@ -37,7 +37,7 @@ print("APP FILE:", __file__)
 
 # --- Lokalni moduli
 from krizanka import pridobi_podatke_iz_xml
-"from uvoz_cc_csv_vus import run as uvoz_cc_run"
+from uvoz_cc_csv_vus import run as uvoz_cc_run
 
 # --- .env (ne prepiše ročno nastavljenih env spremenljivk)
 try:
@@ -781,18 +781,128 @@ def api_preveri_legacy():
 
 
 # ===== Admin: render (front kliče /api/stevec) ===============================
+
 @app.get("/admin")
 @login_required
 def admin():
     return render_template("admin.html", DB_PATH=DB_PATH)
 
+
 from pathlib import Path
-"from uvoz_cc_csv_vus import run as uvoz_cc_run"
 
 BASE_DIR = Path(__file__).resolve().parent
 
-# CSV je zdaj v root/data/cc_clues_DISPLAY_UTF8.csv
+# CSV je v root/data/cc_clues_DISPLAY_UTF8.csv
 CC_CSV_PATH = str(BASE_DIR / "data" / "cc_clues_DISPLAY_UTF8.csv")
+
+
+@app.post("/admin/uvoz-cc-all")
+@login_required
+def admin_uvoz_cc_all():
+    import csv
+    import shutil
+    import sqlite3
+    from pathlib import Path
+
+    try:
+        db_path = Path(DB_PATH)
+        csv_path = Path(CC_CSV_PATH)
+
+        # 1) BACKUP baze
+        backup_path = db_path.with_name(db_path.stem + "_backup_pred_sync.db")
+        shutil.copy2(db_path, backup_path)
+
+        # 2) PREBERI CSV
+        with open(csv_path, encoding="utf-8-sig", newline="") as f:
+            rows = list(csv.reader(f))
+
+        csv_pairs = {
+            (r[0].strip(), r[1].strip())
+            for r in rows[1:]
+            if len(r) >= 2 and r[0].strip() and r[1].strip()
+        }
+
+        # 3) ODPRI BAZO
+        con = sqlite3.connect(str(db_path), timeout=30.0)
+        con.execute("PRAGMA busy_timeout = 30000;")
+
+        try:
+            db_pairs = {
+                (r[0].strip(), r[1].strip())
+                for r in con.execute("SELECT geslo, opis FROM slovar")
+                if r[0] and r[1]
+            }
+
+            missing = csv_pairs - db_pairs
+            extra = db_pairs - csv_pairs
+
+            con.execute("BEGIN;")
+
+            # 4) IZBRIŠI EXTRA
+            for geslo, opis in extra:
+                con.execute(
+                    "DELETE FROM slovar WHERE geslo=? AND opis=?",
+                    (geslo, opis)
+                )
+
+            # 5) DODAJ MISSING
+            for geslo, opis in missing:
+                con.execute(
+                    "INSERT OR IGNORE INTO slovar(geslo, opis) VALUES (?, ?)",
+                    (geslo, opis)
+                )
+
+            # 6) OBNOVI slovar_sortiran
+            con.execute("DELETE FROM slovar_sortiran")
+
+            con.execute("""
+                INSERT OR IGNORE INTO slovar_sortiran(id, geslo, opis)
+                SELECT id, geslo, opis
+                FROM slovar
+            """)
+
+            con.commit()
+
+            # 7) KONČNA KONTROLA
+            slovar_n = con.execute(
+                "SELECT COUNT(*) FROM slovar"
+            ).fetchone()[0]
+
+            sortiran_n = con.execute(
+                "SELECT COUNT(*) FROM slovar_sortiran"
+            ).fetchone()[0]
+
+            db_pairs_after = {
+                (r[0].strip(), r[1].strip())
+                for r in con.execute("SELECT geslo, opis FROM slovar")
+                if r[0] and r[1]
+            }
+
+            missing_after = len(csv_pairs - db_pairs_after)
+            extra_after = len(db_pairs_after - csv_pairs)
+
+        except Exception:
+            con.rollback()
+            raise
+
+        finally:
+            con.close()
+
+        flash(
+            f"Sinhronizacija končana: "
+            f"dodanih {len(missing)}, "
+            f"izbrisanih {len(extra)}. "
+            f"slovar={slovar_n}, "
+            f"slovar_sortiran={sortiran_n}, "
+            f"missing={missing_after}, "
+            f"extra={extra_after}.",
+            "success"
+        )
+
+    except Exception as e:
+        flash(f"Napaka pri sinhronizaciji CSV: {e}", "danger")
+
+    return redirect(url_for("admin"))
 
 
 # # 1) GUMB: samo Citation vsebuje "vpis"
