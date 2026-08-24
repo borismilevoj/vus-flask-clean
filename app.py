@@ -377,6 +377,192 @@ def debug_krizanke():
         "krizanke": rezultat
     })
 
+# ===== JAVNA STRAN POSAMEZNEGA GESLA – SEO ================================
+
+@app.get("/geslo/<path:geslo>", endpoint="javno_geslo")
+def javno_geslo(geslo):
+    geslo = (geslo or "").strip()
+
+    if not geslo:
+        abort(404)
+
+    con = get_conn(readonly=True)
+
+    try:
+        rows = con.execute("""
+            SELECT geslo, opis
+            FROM slovar_sortiran
+            WHERE geslo = ? COLLATE NOCASE
+            ORDER BY
+                CASE
+                    WHEN instr(opis, ' - ') > 0
+                    THEN 0
+                    ELSE 1
+                END,
+
+                trim(
+                    CASE
+                        WHEN instr(opis, ' - ') > 0 THEN
+                            CASE
+                                WHEN instr(
+                                    substr(opis, instr(opis, ' - ') + 3),
+                                    '('
+                                ) > 0
+                                THEN substr(
+                                    substr(opis, instr(opis, ' - ') + 3),
+                                    1,
+                                    instr(
+                                        substr(opis, instr(opis, ' - ') + 3),
+                                        '('
+                                    ) - 1
+                                )
+                                ELSE substr(opis, instr(opis, ' - ') + 3)
+                            END
+                        ELSE opis
+                    END
+                ) COLLATE NOCASE,
+
+                opis COLLATE NOCASE
+        """, (geslo,)).fetchall()
+    finally:
+        con.close()
+
+    if not rows:
+        abort(404)
+
+    pravo_geslo = rows[0][0]
+
+    opisi = [
+        r[1].strip()
+        for r in rows
+        if r[1] and r[1].strip()
+    ]
+
+    return render_template(
+        "geslo.html",
+        geslo=pravo_geslo,
+        opisi=opisi
+    )
+
+from flask import Response
+# ===== SEO: SITEMAP + ROBOTS.TXT ==========================================
+
+from flask import Response
+from xml.sax.saxutils import escape
+
+SITEMAP_CHUNK = 45000
+
+
+@app.get("/sitemap.xml")
+def sitemap_index():
+    con = get_conn(readonly=True)
+
+    try:
+        count = con.execute("""
+            SELECT COUNT(DISTINCT geslo)
+            FROM slovar_sortiran
+            WHERE geslo IS NOT NULL
+              AND trim(geslo) <> ''
+        """).fetchone()[0]
+    finally:
+        con.close()
+
+    pages = (count + SITEMAP_CHUNK - 1) // SITEMAP_CHUNK
+
+    xml = [
+        '<?xml version="1.0" encoding="UTF-8"?>',
+        '<sitemapindex xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">'
+    ]
+
+    for page in range(1, pages + 1):
+        url = url_for(
+            "sitemap_gesla",
+            page=page,
+            _external=True,
+            _scheme="https"
+        )
+
+        xml.append("  <sitemap>")
+        xml.append(f"    <loc>{escape(url)}</loc>")
+        xml.append("  </sitemap>")
+
+    xml.append("</sitemapindex>")
+
+    return Response(
+        "\n".join(xml),
+        mimetype="application/xml"
+    )
+
+@app.get("/robots.txt")
+def robots_txt():
+    vsebina = """User-agent: *
+Allow: /
+
+Sitemap: https://vus-krizanke.si/sitemap.xml
+"""
+    return Response(
+        vsebina,
+        mimetype="text/plain"
+    )
+
+    return Response(
+        "\n".join(xml),
+        mimetype="application/xml"
+    )
+
+@app.get("/sitemap-gesla-<int:page>.xml")
+def sitemap_gesla(page):
+    if page < 1:
+        abort(404)
+
+    offset = (page - 1) * SITEMAP_CHUNK
+
+    con = get_conn(readonly=True)
+
+    try:
+        rows = con.execute("""
+            SELECT DISTINCT geslo
+            FROM slovar_sortiran
+            WHERE geslo IS NOT NULL
+              AND trim(geslo) <> ''
+            ORDER BY geslo COLLATE NOCASE
+            LIMIT ? OFFSET ?
+        """, (SITEMAP_CHUNK, offset)).fetchall()
+    finally:
+        con.close()
+
+    if not rows:
+        abort(404)
+
+    from xml.sax.saxutils import escape
+
+    xml = [
+        '<?xml version="1.0" encoding="UTF-8"?>',
+        '<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">'
+    ]
+
+    for row in rows:
+        geslo = row[0]
+
+        url = url_for(
+            "javno_geslo",
+            geslo=geslo,
+            _external=True,
+            _scheme="https"
+        )
+
+        xml.append("  <url>")
+        xml.append(f"    <loc>{escape(url)}</loc>")
+        xml.append("  </url>")
+
+    xml.append("</urlset>")
+
+    return Response(
+        "\n".join(xml),
+        mimetype="application/xml"
+    )
+
+
 
 # ===== ISKANJE PO VZORCU =====================================================
 @app.get("/isci-vzorec", endpoint="isci_vzorec")
@@ -1666,9 +1852,10 @@ def prispevaj_geslo():
 
     return render_template("prispevaj.html")
 
-@app.route("/sitemap.xml")
-def sitemap():
-    return send_from_directory("static", "sitemap.xml")
+# STARI STATIČNI SITEMAP - NE UPORABLJAMO VEČ
+# @app.route("/sitemap.xml")
+# def sitemap():
+#     return send_from_directory("static", "sitemap.xml")
 
 @app.get("/preveri_slika")
 def preveri_slika():

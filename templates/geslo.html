@@ -1,0 +1,46 @@
+{% extends "base.html" %}
+
+{% block title %}{{ geslo }} – pomen in razlaga | VUS{% endblock %}
+
+{% block head %}
+<link rel="canonical"
+      href="{{ url_for('javno_geslo', geslo=geslo, _external=True) }}">
+
+<meta name="description"
+      content="{{ geslo }} – pomen, razlaga in podatki za križanke v Velikem ugankarskem slovarju.">
+{% endblock %}
+
+{% block content %}
+
+<div class="container py-4">
+
+    <h1>{{ geslo }}</h1>
+
+    {% if opisi|length == 1 %}
+        <p class="text-muted">Pomen gesla v Velikem ugankarskem slovarju</p>
+    {% else %}
+        <p class="text-muted">
+            Najdenih {{ opisi|length }} pomenov oziroma razlag
+        </p>
+    {% endif %}
+
+    <div class="list-group mt-4">
+
+        {% for opis in opisi %}
+        <div class="list-group-item">
+            {{ opis }}
+        </div>
+        {% endfor %}
+
+    </div>
+
+    <div class="mt-4">
+        <a href="{{ url_for('isci_vzorec') }}"
+           class="btn btn-outline-primary">
+            Išči po vzorcu
+        </a>
+    </div>
+
+</div>
+
+{% endblock %}python app.py
