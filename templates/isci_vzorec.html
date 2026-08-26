@@ -265,9 +265,9 @@
 
       html += '<tr>' +
         '<td>' +
-          '<button type="button" class="btn btn-link p-0 geslo-pick" data-geslo="' + esc(geslo) + '" style="text-decoration:none;">' +
-            '<strong>' + esc(geslo) + '</strong>' +
-          '</button>' +
+          '<a class="btn btn-link p-0" href="/geslo/' + encodeURIComponent(geslo) + '" style="text-decoration:none;">' +
+  '<strong>' + esc(geslo) + '</strong>' +
+'</a>' +
         '</td>' +
         '<td>' + esc(opis) + '</td>' +
       '</tr>';
@@ -340,26 +340,7 @@
       });
     }
 
-    // klik na rezultat (geslo) -> napolni polja + išči
-    var rez = $('#rezultati');
-    if (rez) {
-      rez.addEventListener('click', function (e) {
-        var btn = e.target && (e.target.closest ? e.target.closest('.geslo-pick') : null);
-        if (!btn) return;
 
-        var word = (btn.getAttribute('data-geslo') || '').trim().toUpperCase();
-        if (!word) return;
-
-        // odstranimo presledke/apostrofe (da pattern štima)
-        var pure = word.replace(/[\s']/g, '');
-        setStevilo(pure.length);
-        generirajPolja(false);
-        setInputsFromPattern(pure);
-
-        // pro UX: takoj išči
-        window.isciVzorec();
-      });
-    }
 
     // gumb IŠČI (podpremo oba id-ja)
     var btn1 = $('#btn-isci') || $('#btn-iscI');
