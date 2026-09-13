@@ -143,7 +143,12 @@ def get_conn(readonly: bool = False) -> sqlite3.Connection:
 # ===== Flask app =============================================================
 app = Flask(__name__, static_folder="static", static_url_path="/static")
 app.url_map.strict_slashes = False
-app.secret_key = "boris-vus-krizanka-1234567890"
+import os
+
+app.secret_key = os.environ.get("SECRET_KEY")
+
+if not app.secret_key:
+    raise RuntimeError("SECRET_KEY ni nastavljen")
 # ali katerikoli drug dolg string, samo da NI None/prazen
 
 from pathlib import Path
@@ -689,7 +694,6 @@ def isci_vzorec_api():
         # Dodatni filter: vse pomembne besede, ne glede na vrstni red
         if dodatno:
             iskane_besede = razdeli_iskanje(dodatno)
-
             iskani_stolpec = desc_col if desc_col != "''" else geslo_col
 
             for beseda in iskane_besede:
