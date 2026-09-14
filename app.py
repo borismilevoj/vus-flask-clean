@@ -246,6 +246,12 @@ def find_existing_image_filename(opis: str, dodatno: str = "", max_dupes: int = 
         return None
 
     # 1) najprej "nova" varianta -> SLUG, brez končnice
+    # preveri tudi 40-besedne starejše slike
+    base40 = naredi_slug_iz_opisa(opis, dodatno, max_words=40)
+
+    # trenutna standardna varianta
+    # starejša 40-besedna varianta
+    base40 = naredi_slug_iz_opisa(opis, dodatno, max_words=40)
     base30 = naredi_slug_iz_opisa(opis, dodatno, max_words=MAX_IMAGE_WORDS)
 
     # 2) fallback: staro obnašanje 15 besed
@@ -270,9 +276,11 @@ def find_existing_image_filename(opis: str, dodatno: str = "", max_dupes: int = 
     base15 = base15_local(opis, dodatno)
 
     # kandidati v pravem vrstnem redu
-    bases = [base30]
-    if base15 != base30:
-        bases.append(base15)
+    bases = []
+
+    for base in (base40, base30, base15):
+        if base and base not in bases:
+            bases.append(base)
 
     for base in bases:
         # a) exact (brez (1))
@@ -295,11 +303,51 @@ def find_existing_image_filename(opis: str, dodatno: str = "", max_dupes: int = 
 def login_required(f):
     @wraps(f)
     def _wrap(*a, **kw):
-        # TODO: poveži na tvojo sejo/geslo, če želiš omejitve
+        if not session.get("admin_logged_in"):
+            return redirect(url_for("admin_login"))
         return f(*a, **kw)
     return _wrap
+@app.route("/admin/login", methods=["GET", "POST"])
+def admin_login():
+    error = None
 
+    if request.method == "POST":
+        password = (request.form.get("password") or "").strip()
+        expected = (os.environ.get("ADMIN_PASSWORD") or "").strip()
 
+        if expected and password == expected:
+            session["admin_logged_in"] = True
+            return redirect(url_for("admin"))
+
+        error = "Napačno geslo."
+
+    return render_template_string("""
+        <!doctype html>
+        <html lang="sl">
+        <head>
+            <meta charset="utf-8">
+            <title>VUS Admin prijava</title>
+        </head>
+        <body>
+            <h2>VUS Admin prijava</h2>
+
+            {% if error %}
+                <p style="color:red;">{{ error }}</p>
+            {% endif %}
+
+            <form method="post">
+                <label>Geslo:</label><br>
+                <input type="password" name="password" required autofocus>
+                <br><br>
+                <button type="submit">Prijava</button>
+            </form>
+        </body>
+        </html>
+    """, error=error)
+@app.get("/admin/logout")
+def admin_logout():
+    session.pop("admin_logged_in", None)
+    return redirect(url_for("admin_login"))
 # ===== Home + favicon ========================================================
 @app.get("/")
 def home():
@@ -909,6 +957,7 @@ def api_preveri_geslo():
 
 
 @app.get("/api/gesla_admin")
+@login_required
 def api_gesla_admin():
     q = (request.args.get("geslo") or "").strip()
     if not q:
@@ -1673,6 +1722,7 @@ def image_url_for_clue(opis: str, dodatno: str = "", prefer_ext: str = ".jpg") -
 
 
 @app.post("/api/brisi_geslo")
+@login_required
 def api_brisi_geslo():
     """
     Briše geslo iz tabele 'slovar' po ID-ju.
@@ -1707,6 +1757,7 @@ def api_brisi_geslo():
 
 
 @app.post("/api/uredi_geslo")
+@login_required
 def api_uredi_geslo():
     """
     Uredi geslo v tabeli 'slovar' po ID-ju.
@@ -1778,6 +1829,7 @@ def api_uredi_geslo():
         return jsonify(ok=False, msg=str(e)), 500
 
 @app.post("/api/dodaj_geslo")
+@login_required
 def api_dodaj_geslo():
     data = request.get_json(silent=True) or request.form
 
@@ -1866,6 +1918,7 @@ def preveri_slika():
     return render_template("preveri_sliko.html")
 
 @app.post("/api/preveri_sliko")
+@login_required
 def api_preveri_sliko():
     """
     Bulletproof:
@@ -1948,6 +2001,7 @@ def api_preveri_sliko():
     })
 
 @app.post("/api/upload_sliko")
+@login_required
 def api_upload_sliko():
     import os
     import shutil
@@ -2008,10 +2062,9 @@ from pathlib import Path
 from flask import render_template_string
 
 @app.get("/admin/upload-cc")
+@login_required
 def admin_upload_cc_form():
-    key = request.args.get("key")
-    if key != (os.environ.get("ADMIN_KEY") or "").strip():
-        abort(403)
+
 
     return render_template_string("""
     <h2>Upload CC CSV</h2>
@@ -2028,10 +2081,8 @@ from pathlib import Path
 from flask import request, jsonify, abort
 
 @app.post("/admin/upload-cc")
+@login_required
 def admin_upload_cc():
-    key = request.args.get("key")
-    if key != (os.environ.get("ADMIN_KEY") or "").strip():
-        abort(403)
 
     f = request.files.get("file")
     if not f or not f.filename:
@@ -2046,6 +2097,7 @@ def admin_upload_cc():
 
 
 @app.get("/api/stevec-debug")
+@login_required
 def api_stevec_debug():
     import os
     from pathlib import Path
