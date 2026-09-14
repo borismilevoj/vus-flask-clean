@@ -1046,6 +1046,12 @@ def admin_uvoz_cc_all():
     try:
         db_path = Path(DB_PATH)
         csv_path = Path(CC_CSV_PATH)
+        if not csv_path.exists():
+            flash(
+                "CSV za CC na strežniku ni na voljo. Sinhronizacija je bila preskočena.",
+                "warning"
+            )
+            return redirect(url_for("admin"))
 
         # 1) BACKUP baze
         backup_path = db_path.with_name(db_path.stem + "_backup_pred_sync.db")
