@@ -1039,18 +1039,30 @@ CC_CSV_PATH = (os.getenv("CC_CLUES_PATH") or "/var/data/cc_clues_DISPLAY_UTF8.cs
 @app.post("/admin/uvoz-cc-all")
 @login_required
 def admin_uvoz_cc_all():
+    global UVOZ_CC_ALL_STATUS
+
+    if UVOZ_CC_ALL_STATUS["running"]:
+        flash("Uvoz iz CC že teče. Počakaj na zaključek.", "warning")
+        return redirect(url_for("admin"))
+
+    UVOZ_CC_ALL_STATUS["running"] = True
+    UVOZ_CC_ALL_STATUS["last_msg"] = None
+    UVOZ_CC_ALL_STATUS["last_error"] = None
+    thread = threading.Thread(target=_run_uvoz_cc_all_bg, daemon=True)
+    thread.start()
+    flash("Uvoz iz CC se izvaja v ozadju. Stran lahko pustiš odprto.", "info")
+    return redirect(url_for("admin"))
+
+
+def _run_uvoz_cc_all_bg():
+    global UVOZ_CC_ALL_STATUS
     import shutil
-    from pathlib import Path
 
     try:
         db_path = Path(DB_PATH)
         csv_path = Path(CC_CSV_PATH)
         if not csv_path.exists():
-            flash(
-                "CSV za CC na strežniku ni na voljo. Sinhronizacija je bila preskočena.",
-                "warning"
-            )
-            return redirect(url_for("admin"))
+            raise FileNotFoundError("Naloženi CC CSV na strežniku ne obstaja.")
 
         # Varnostna kopija je namenoma narejena pred vsakim uvozom.
         backup_path = db_path.with_name(db_path.stem + "_backup_pred_sync.db")
@@ -1067,23 +1079,32 @@ def admin_uvoz_cc_all():
             dry_run=False,
         )
 
-        flash(
-            f"Uvoz iz CC je končan: dodanih {stats['inserted']}, "
+        UVOZ_CC_ALL_STATUS["last_msg"] = (
+            f"Uvoz končan: dodanih {stats['inserted']}, "
             f"posodobljenih {stats['updated']}, "
-            f"preskočenih {stats['skipped']}.",
-            "success"
+            f"preskočenih {stats['skipped']}."
         )
 
     except Exception as e:
-        flash(f"Napaka pri sinhronizaciji CSV: {e}", "danger")
+        UVOZ_CC_ALL_STATUS["last_error"] = f"Napaka pri uvozu CC: {e}"
+    finally:
+        UVOZ_CC_ALL_STATUS["running"] = False
 
-    return redirect(url_for("admin"))
+
+@app.get("/admin/uvoz-cc-status")
+@login_required
+def admin_uvoz_cc_status():
+    return jsonify(ok=True, **UVOZ_CC_ALL_STATUS)
 
 
 @app.post("/admin/obnovi-zadnji-uvoz-cc")
 @login_required
 def admin_obnovi_zadnji_uvoz_cc():
     import shutil
+
+    if UVOZ_CC_ALL_STATUS["running"]:
+        flash("Obnova med uvozom ni dovoljena. Najprej počakaj na zaključek.", "warning")
+        return redirect(url_for("admin"))
 
     db_path = Path(DB_PATH)
     backup_path = db_path.with_name(db_path.stem + "_backup_pred_sync.db")
