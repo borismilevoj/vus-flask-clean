@@ -1,4 +1,4 @@
-# ===== app.py ================================================================
+
 from __future__ import annotations
 
 # --- Stdlib
@@ -1031,8 +1031,9 @@ from pathlib import Path
 
 BASE_DIR = Path(__file__).resolve().parent
 
-# CSV je v root/data/cc_clues_DISPLAY_UTF8.csv
-CC_CSV_PATH = str(BASE_DIR / "data" / "cc_clues_DISPLAY_UTF8.csv")
+# CSV, ki ga administrator naloži neposredno iz računalnika.
+# Lokalno se lahko po želji nastavi CC_CLUES_PATH; na Renderju ostane na trajnem disku.
+CC_CSV_PATH = (os.getenv("CC_CLUES_PATH") or "/var/data/cc_clues_DISPLAY_UTF8.csv").strip()
 
 
 @app.post("/admin/uvoz-cc-all")
@@ -2070,15 +2071,7 @@ from flask import render_template_string
 @app.get("/admin/upload-cc")
 @login_required
 def admin_upload_cc_form():
-
-
-    return render_template_string("""
-    <h2>Upload CC CSV</h2>
-    <form method="post" enctype="multipart/form-data">
-      <input type="file" name="file" />
-      <button type="submit">Upload</button>
-    </form>
-    """)
+    return redirect(url_for("admin"))
 
 
 
@@ -2089,17 +2082,31 @@ from flask import request, jsonify, abort
 @app.post("/admin/upload-cc")
 @login_required
 def admin_upload_cc():
-
     f = request.files.get("file")
     if not f or not f.filename:
-        return jsonify(ok=False, msg="Manjka file"), 400
+        flash("Izberi CC CSV datoteko.", "warning")
+        return redirect(url_for("admin"))
 
-    # pomembno: .strip() pobere \n in presledke iz env var
-    out_path = Path((os.getenv("CC_CLUES_PATH") or "/var/data/cc_clues_DISPLAY_UTF8.csv").strip())
+    if not f.filename.lower().endswith(".csv"):
+        flash("Izbrana datoteka ni CSV.", "danger")
+        return redirect(url_for("admin"))
+
+    out_path = Path(CC_CSV_PATH)
     out_path.parent.mkdir(parents=True, exist_ok=True)
+    temp_path = out_path.with_suffix(".uploading")
 
-    f.save(str(out_path))
-    return jsonify(ok=True, saved=str(out_path))
+    try:
+        f.save(str(temp_path))
+        if temp_path.stat().st_size == 0:
+            raise ValueError("Datoteka je prazna.")
+        temp_path.replace(out_path)
+    except Exception as e:
+        temp_path.unlink(missing_ok=True)
+        flash(f"Nalaganje CC CSV ni uspelo: {e}", "danger")
+        return redirect(url_for("admin"))
+
+    flash("CC CSV je naložen. Zdaj klikni »UVOZI GESLA IZ CC«.", "success")
+    return redirect(url_for("admin"))
 
 
 @app.get("/api/stevec-debug")
