@@ -215,11 +215,17 @@ def run(csv_path: str, db_path: str, word_col: str = None, clue_col: str = None,
             print("❌ Zahtevan je filter po Citation, a stolpec 'Citation' v CSV ne obstaja.")
             sys.exit(1)
 
-        with closing(sqlite3.connect(db_path)) as conn:
+        with closing(sqlite3.connect(db_path, timeout=30.0)) as conn:
             conn.row_factory = sqlite3.Row
+
+            # Če je baza trenutno za kratek čas zasedena, počakaj do 30 sekund.
+            conn.execute("PRAGMA busy_timeout = 30000;")
+
             conn.execute("PRAGMA journal_mode=WAL;")
             conn.execute("PRAGMA synchronous=NORMAL;")
             conn.execute("PRAGMA temp_store=MEMORY;")
+
+            ensure_schema(conn)
 
             ensure_schema(conn)
 
@@ -304,7 +310,7 @@ def run(csv_path: str, db_path: str, word_col: str = None, clue_col: str = None,
                     # ⟵⟵⟵ DODANO: auto refresh slovar_sortiran po uvozu
                     if refresh_sortiran:
                         try:
-                            refresh_slovar_sortiran(db_path)
+                            refresh_slovar_sortiran(conn)
                             if verbose:
                                 print("🔄 slovar_sortiran: osvežen (sort po delu za ' - ')")
                         except Exception as e:
@@ -353,28 +359,24 @@ def run(csv_path: str, db_path: str, word_col: str = None, clue_col: str = None,
         "only_citation_contains": only_citation_contains,
     }
 
-def refresh_slovar_sortiran(db_path: str):
-    """Po uvozu poravna slovar_sortiran iz slovar, z abecednim redom po delu za ' - '."""
-    import sqlite3
-    con = sqlite3.connect(db_path)
-    cur = con.cursor()
-    cur.execute("BEGIN")
-    cur.execute("DELETE FROM slovar_sortiran")
-    cur.execute("""
-    INSERT OR IGNORE INTO slovar_sortiran(geslo, opis)
-    SELECT geslo, opis
-    FROM slovar
-    ORDER BY
-      CASE
-        WHEN instr(opis, ' - ') > 0
-          THEN lower(trim(substr(opis, instr(opis, ' - ')+3)))
-        ELSE lower(opis)
-      END
+def refresh_slovar_sortiran(conn):
+    """Po uvozu poravna slovar_sortiran iz slovar."""
+
+    conn.execute("DELETE FROM slovar_sortiran")
+
+    conn.execute("""
+        INSERT OR IGNORE INTO slovar_sortiran(id, geslo, opis)
+        SELECT id, geslo, opis
+        FROM slovar
+        ORDER BY
+            CASE
+                WHEN instr(opis, ' - ') > 0
+                THEN lower(trim(substr(opis, instr(opis, ' - ')+3)))
+                ELSE lower(opis)
+            END
     """)
-    cur.execute("COMMIT")
-    con.close()
 
-
+    conn.commit()
 
 def main():
     ap = argparse.ArgumentParser(description="Uvoz CC CSV v VUS.db (tabela 'slovar').")
