@@ -37,16 +37,25 @@
   <div class="mb-3 d-flex flex-wrap align-items-center gap-2">
 
 
-<form method="post"
-      action="{{ url_for('admin_uvoz_cc_all') }}"
-      onsubmit="return confirm('Uvozim celoten CC CSV v VUS.db? Postopek lahko traja nekaj časa.');"
-      style="margin: 15px 0;">
+<div class="d-flex flex-wrap align-items-end gap-2 my-3">
+  <form method="post"
+        action="{{ url_for('admin_upload_cc') }}"
+        enctype="multipart/form-data"
+        class="d-flex flex-wrap align-items-end gap-2">
+    <div>
+      <label for="ccCsv" class="form-label mb-1">CC CSV z računalnika</label>
+      <input id="ccCsv" class="form-control" type="file" name="file"
+             accept=".csv,text/csv" required>
+    </div>
+    <button type="submit" class="btn btn-outline-primary">NALOŽI CC CSV</button>
+  </form>
 
-    <button type="submit" class="btn btn-primary">
-        UVOZI GESLA IZ CC
-    </button>
-
-</form>
+  <form method="post"
+        action="{{ url_for('admin_uvoz_cc_all') }}"
+        onsubmit="return confirm('Uvozim naloženi CC CSV v VUS.db? Postopek lahko traja nekaj časa.');">
+    <button type="submit" class="btn btn-primary">UVOZI GESLA IZ CC</button>
+  </form>
+</div>
 
     <!-- MINI ŠTEVEC -->
     <div class="ms-auto d-flex align-items-center gap-2">
