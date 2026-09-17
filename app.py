@@ -1,4 +1,4 @@
-
+# ===== app.py ================================================================
 from __future__ import annotations
 
 # --- Stdlib
@@ -1039,9 +1039,7 @@ CC_CSV_PATH = (os.getenv("CC_CLUES_PATH") or "/var/data/cc_clues_DISPLAY_UTF8.cs
 @app.post("/admin/uvoz-cc-all")
 @login_required
 def admin_uvoz_cc_all():
-    import csv
     import shutil
-    import sqlite3
     from pathlib import Path
 
     try:
@@ -1054,99 +1052,53 @@ def admin_uvoz_cc_all():
             )
             return redirect(url_for("admin"))
 
-        # 1) BACKUP baze
+        # Varnostna kopija je namenoma narejena pred vsakim uvozom.
         backup_path = db_path.with_name(db_path.stem + "_backup_pred_sync.db")
         shutil.copy2(db_path, backup_path)
 
-        # 2) PREBERI CSV
-        with open(csv_path, encoding="utf-8-sig", newline="") as f:
-            rows = list(csv.reader(f))
-
-        csv_pairs = {
-            (r[0].strip(), r[1].strip())
-            for r in rows[1:]
-            if len(r) >= 2 and r[0].strip() and r[1].strip()
-        }
-
-        # 3) ODPRI BAZO
-        con = sqlite3.connect(str(db_path), timeout=30.0)
-        con.execute("PRAGMA busy_timeout = 30000;")
-
-        try:
-            db_pairs = {
-                (r[0].strip(), r[1].strip())
-                for r in con.execute("SELECT geslo, opis FROM slovar")
-                if r[0] and r[1]
-            }
-
-            missing = csv_pairs - db_pairs
-            extra = db_pairs - csv_pairs
-
-            con.execute("BEGIN;")
-
-            # 4) IZBRIŠI EXTRA
-            for geslo, opis in extra:
-                con.execute(
-                    "DELETE FROM slovar WHERE geslo=? AND opis=?",
-                    (geslo, opis)
-                )
-
-            # 5) DODAJ MISSING
-            for geslo, opis in missing:
-                con.execute(
-                    "INSERT OR IGNORE INTO slovar(geslo, opis) VALUES (?, ?)",
-                    (geslo, opis)
-                )
-
-            # 6) OBNOVI slovar_sortiran
-            con.execute("DELETE FROM slovar_sortiran")
-
-            con.execute("""
-                INSERT OR IGNORE INTO slovar_sortiran(id, geslo, opis)
-                SELECT id, geslo, opis
-                FROM slovar
-            """)
-
-            con.commit()
-
-            # 7) KONČNA KONTROLA
-            slovar_n = con.execute(
-                "SELECT COUNT(*) FROM slovar"
-            ).fetchone()[0]
-
-            sortiran_n = con.execute(
-                "SELECT COUNT(*) FROM slovar_sortiran"
-            ).fetchone()[0]
-
-            db_pairs_after = {
-                (r[0].strip(), r[1].strip())
-                for r in con.execute("SELECT geslo, opis FROM slovar")
-                if r[0] and r[1]
-            }
-
-            missing_after = len(csv_pairs - db_pairs_after)
-            extra_after = len(db_pairs_after - csv_pairs)
-
-        except Exception:
-            con.rollback()
-            raise
-
-        finally:
-            con.close()
+        # Uporabi preverjeni uvoznik: pravilno prepozna stolpce CC CSV-ja,
+        # obstoječa gesla posodobi in nato osveži slovar_sortiran.
+        stats = uvoz_cc_run(
+            csv_path=str(csv_path),
+            db_path=str(db_path),
+            import_all=True,
+            only_citation_contains=None,
+            verbose=False,
+            dry_run=False,
+        )
 
         flash(
-            f"Sinhronizacija končana: "
-            f"dodanih {len(missing)}, "
-            f"izbrisanih {len(extra)}. "
-            f"slovar={slovar_n}, "
-            f"slovar_sortiran={sortiran_n}, "
-            f"missing={missing_after}, "
-            f"extra={extra_after}.",
+            f"Uvoz iz CC je končan: dodanih {stats['inserted']}, "
+            f"posodobljenih {stats['updated']}, "
+            f"preskočenih {stats['skipped']}.",
             "success"
         )
 
     except Exception as e:
         flash(f"Napaka pri sinhronizaciji CSV: {e}", "danger")
+
+    return redirect(url_for("admin"))
+
+
+@app.post("/admin/obnovi-zadnji-uvoz-cc")
+@login_required
+def admin_obnovi_zadnji_uvoz_cc():
+    import shutil
+
+    db_path = Path(DB_PATH)
+    backup_path = db_path.with_name(db_path.stem + "_backup_pred_sync.db")
+    if not backup_path.exists():
+        flash("Varnostne kopije pred zadnjim uvozom ni več.", "warning")
+        return redirect(url_for("admin"))
+
+    try:
+        restore_path = db_path.with_suffix(".restore")
+        shutil.copy2(backup_path, restore_path)
+        restore_path.replace(db_path)
+        backup_path.unlink()
+        flash("Baza je obnovljena na stanje pred zadnjim CC uvozom.", "success")
+    except Exception as e:
+        flash(f"Obnova baze ni uspela: {e}", "danger")
 
     return redirect(url_for("admin"))
 
