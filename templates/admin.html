@@ -63,6 +63,8 @@
   </form>
 </div>
 
+<div id="ccUvozStatus" class="small text-muted mb-3" aria-live="polite"></div>
+
     <!-- MINI ŠTEVEC -->
     <div class="ms-auto d-flex align-items-center gap-2">
       <span class="badge bg-light text-dark border">
@@ -517,6 +519,30 @@ document.getElementById('btnArhiviraj')?.addEventListener('click', async () => {
   });
 })();   // <--- TOLE JE MANJKALO
 
+</script>
+<script>
+async function osveziCcUvozStatus() {
+  const box = document.getElementById('ccUvozStatus');
+  if (!box) return;
+  try {
+    const r = await fetch('/admin/uvoz-cc-status', {cache: 'no-store'});
+    const d = await r.json();
+    if (d.running) {
+      box.className = 'small text-primary mb-3';
+      box.textContent = 'Uvoz iz CC poteka. Ne zapiraj Renderja in ne klikaj uvoza še enkrat.';
+    } else if (d.last_error) {
+      box.className = 'small text-danger mb-3';
+      box.textContent = d.last_error;
+    } else if (d.last_msg) {
+      box.className = 'small text-success mb-3';
+      box.textContent = d.last_msg;
+    } else {
+      box.textContent = '';
+    }
+  } catch (_) { }
+}
+osveziCcUvozStatus();
+setInterval(osveziCcUvozStatus, 5000);
 </script>
 </div>
 {% endblock %}
