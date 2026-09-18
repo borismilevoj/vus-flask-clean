@@ -2,246 +2,71 @@
 {% block title %}Preveri sliko{% endblock %}
 
 {% block content %}
-<div class="container my-4">
-  <h1 class="mb-4">Preveri sliko za namig</h1>
-
-  <p class="text-muted">
-    Sistem išče slike v <code>static/Images</code> z eno od končnic:
-    <code>.jpg</code>, <code>.jpeg</code>, <code>.png</code>, <code>.webp</code>.
-    Ime slike se generira iz opisa + dodatnega besedila (npr. Sagres).
-  </p>
-
-  <div class="row g-4">
-    <!-- LEVA STRAN: opis + dodatno -->
-    <div class="col-md-6">
-      <div class="card h-100">
-        <div class="card-body">
-          <h5 class="card-title mb-3">1. Vnesi opis in (po želji) dopolni ime</h5>
-
-          <div class="mb-3">
-            <label for="opis" class="form-label">Opis namiga</label>
-            <textarea id="opis" class="form-control" rows="4"
-              placeholder="npr. ameriški slikar John Taylor (1887–1953)"></textarea>
-            <div class="form-text">
-              Celoten opis, kot ga imaš v križanki.
-            </div>
-          </div>
-
-          <div class="mb-3">
-            <label for="dodatno" class="form-label">Dodatno ime / ključno geslo (neobvezno)</label>
-            <input id="dodatno" type="text" class="form-control"
-                   placeholder="npr. Sagres, Apia, ime filma ...">
-            <div class="form-text">
-              To se doda na konec in pomaga razlikovati mesta, osebe, filme itd.
-            </div>
-          </div>
-
-          <button class="btn btn-primary" onclick="preveriSliko()">
-            Generiraj ime in preveri sliko
-          </button>
-        </div>
-      </div>
+<div class="container my-4" style="max-width:1000px">
+  <h1 class="mb-3">Preveri sliko</h1>
+  <p class="text-muted">Najprej vpiši <strong>geslo</strong>. Iskanje pokaže vse njegove opise in preveri slike v novem ter starem VUS-u. Opis je neobvezen dodatni filter.</p>
+  <div class="card mb-4"><div class="card-body">
+    <div class="row g-3">
+      <div class="col-md-4"><label class="form-label" for="geslo">Geslo</label><input id="geslo" class="form-control" placeholder="npr. TRAORE"></div>
+      <div class="col-md-8"><label class="form-label" for="opis">Opis – dodatni filter</label><input id="opis" class="form-control" placeholder="npr. slikar 1936 ali pisatelj John"></div>
     </div>
+    <button class="btn btn-primary mt-3" type="button" onclick="preveriSliko()">Preveri</button>
+  </div></div>
 
-    <!-- DESNA STRAN: rezultat + upload -->
-    <div class="col-md-6">
-      <div class="card h-100" id="rezultatCard" style="display:none;">
-        <div class="card-body">
-          <h5 class="card-title mb-3">2. Rezultat in ime slike</h5>
+  <div id="status" class="mb-3" aria-live="polite"></div>
+  <div id="rezultati" class="row g-3"></div>
 
-<div class="mb-3">
-  <label class="form-label">Predlagano ime datoteke</label>
-  <div class="input-group">
-    <input id="predlagano_ime" type="text" class="form-control">
-    <button type="button" class="btn btn-outline-secondary" onclick="kopirajIme()">
-      Kopiraj ime
-    </button>
-  </div>
-
-  <div class="form-text">
-    To ime uporabi v Crossword Compilerju / bazi. Končnico lahko po želji ročno popraviš.
-  </div>
-</div>
-
-<div class="mb-3">
-  <label class="form-label">Najdena datoteka</label>
-  <div id="dejanska_datoteka" class="form-control" style="background:#f8f9fa;">
-    -
-  </div>
-  <div class="form-text">
-    To je dejanska datoteka, ki jo sistem uporablja za predogled in jo boš zamenjal.
-  </div>
-</div>
-          <div class="mb-3">
-  <span class="fw-semibold">Status:&nbsp;</span>
-  <span id="status_text" class="badge bg-secondary">–</span>
-</div>
-
-<div class="mb-3" id="preview_wrapper" style="display:none;">
-  <label class="form-label">Predogled slike</label><br>
-  <img id="preview_img"
-       src=""
-       alt="Predogled slike"
-       style="max-width:100%; max-height:300px; border:1px solid #ddd; border-radius:4px;">
-</div>
-
-<hr>
-
-<h6 class="mb-3">3. Naloži ali zamenjaj sliko</h6>
-          <form id="upload_form" onsubmit="uploadSliko(event)">
-            <div class="mb-3">
-              <input type="file" name="file" id="file_input" class="form-control" accept="image/*">
-              <div class="form-text">
-                Končnica (jpg/png/webp/…) se vzame iz izbrane datoteke.
-              </div>
-            </div>
-            <button type="submit" class="btn btn-success">
-              Naloži sliko z zgornjim imenom
-            </button>
-          </form>
-
-        </div>
-      </div>
-    </div>
-  </div>
+  <div class="card mt-4" id="uploadCard" style="display:none"><div class="card-body">
+    <h5>Naloži manjkajočo sliko</h5>
+    <label class="form-label">Ime datoteke</label>
+    <div class="input-group mb-3"><input id="predlagano_ime" class="form-control"><button class="btn btn-outline-secondary" type="button" onclick="kopirajIme()">Kopiraj</button></div>
+    <form onsubmit="uploadSliko(event)"><input id="file_input" class="form-control mb-3" type="file" accept="image/*"><button class="btn btn-success">Naloži sliko</button></form>
+  </div></div>
 </div>
 
 <script>
-async function preveriSliko() {
-  const opis = document.getElementById("opis").value.trim();
-  const dodatno = document.getElementById("dodatno").value.trim();
+const esc = value => String(value || '').replace(/[&<>'"]/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;',"'":'&#39;','"':'&quot;'}[c]));
 
-  if (!opis && !dodatno) {
-    alert("Vnesi vsaj opis ali dodatno ime.");
-    return;
-  }
-
-  try {
-    const resp = await fetch("/api/preveri_sliko", {
-      method: "POST",
-      headers: {"Content-Type": "application/json"},
-      body: JSON.stringify({opis, dodatno})
-    });
-
-    if (!resp.ok) {
-      alert("Napaka pri preverjanju slike (status " + resp.status + ").");
-      return;
-    }
-
-    const data = await resp.json();
-
-    // pokažemo kartico z rezultatom
-    document.getElementById("rezultatCard").style.display = "block";
-
-    // predlagano ime (vključno s končnico)
-    document.getElementById("predlagano_ime").value =
-  data.found_filename || data.suggested_filename || data.filename || "";
-    document.getElementById("dejanska_datoteka").textContent =
-    data.found_filename || "(ni najdene datoteke)";
-    const statusEl = document.getElementById("status_text");
-    const previewWrapper = document.getElementById("preview_wrapper");
-    const previewImg = document.getElementById("preview_img");
-
-    if (data.exists) {
-  statusEl.textContent = "Slika obstaja";
-  statusEl.className = "badge bg-success";
-
-  if (data.url || data.preview_url) {
-    previewWrapper.style.display = "block";
-
-    let u = data.url || data.preview_url || "";
-
-    if (u.startsWith("/images/")) {
-      u = u.replace("/images/", "/static/Images/");
-    }
-
-    previewImg.src = u + "?_=" + Date.now();
-  } else {
-    previewWrapper.style.display = "none";
-    previewImg.src = "";
-  }
-
-} else {
-  statusEl.textContent = "Slika NE obstaja (še)";
-  statusEl.className = "badge bg-danger";
-  previewWrapper.style.display = "none";
-  previewImg.src = "";
+function pripraviUpload(name) {
+  document.getElementById('predlagano_ime').value = name || '';
+  document.getElementById('uploadCard').style.display = 'block';
+  document.getElementById('uploadCard').scrollIntoView({behavior: 'smooth', block: 'center'});
 }
 
-  } catch (err) {
-    console.error(err);
-    alert("Prišlo je do napake pri komunikaciji s strežnikom.");
-  }
+async function preveriSliko() {
+  const geslo = document.getElementById('geslo').value.trim();
+  const opis = document.getElementById('opis').value.trim();
+  if (!geslo && !opis) { alert('Vnesi geslo ali opis.'); return; }
+  const status = document.getElementById('status');
+  const results = document.getElementById('rezultati');
+  status.textContent = 'Iščem …'; results.innerHTML = '';
+  try {
+    const response = await fetch('/api/preveri_sliko', {method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify({geslo, opis})});
+    const data = await response.json();
+    if (!response.ok || !data.ok) throw new Error(data.error || 'Napaka pri iskanju.');
+    const matches = data.matches || [];
+    status.innerHTML = matches.length ? `Najdenih zapisov: <strong>${matches.length}</strong>.` : 'Za ta vnos ni zapisov.';
+    results.innerHTML = matches.map(item => `
+      <div class="col-md-6"><div class="card h-100"><div class="card-body">
+        <div class="fw-bold">${esc(item.geslo)}</div><div class="small mb-2">${esc(item.opis)}</div>
+        ${item.exists ? `<span class="badge bg-success">Slika obstaja: ${esc(item.source)}</span><div class="mt-2"><img class="img-fluid rounded border" style="max-height:220px" src="${encodeURI(item.preview_url)}?_=${Date.now()}" alt="Predogled"></div>` : '<span class="badge bg-danger">Slike ni</span>'}
+        <div class="mt-3"><button class="btn btn-sm btn-outline-primary" type="button" onclick='pripraviUpload(${JSON.stringify(item.suggested_filename || '')})'>Uporabi ime za sliko</button></div>
+      </div></div></div>`).join('');
+  } catch (error) { status.innerHTML = `<span class="text-danger">${esc(error.message)}</span>`; }
 }
 
 async function uploadSliko(event) {
   event.preventDefault();
-
-  const fileInput = document.getElementById("file_input");
-  const filename = document.getElementById("predlagano_ime").value.trim();
-
-  if (!fileInput.files || fileInput.files.length === 0) {
-    alert("Izberi datoteko za upload.");
-    return;
-  }
-
-  if (!filename) {
-    alert("Najprej generiraj ime (ali ga vpiši), da vemo, pod katerim imenom naj se slika shrani.");
-    return;
-  }
-
-  const formData = new FormData();
-  formData.append("file", fileInput.files[0]);
-  formData.append("filename", filename);
-
-  try {
-    const resp = await fetch("/api/upload_sliko", {
-      method: "POST",
-      body: formData
-    });
-
-    if (!resp.ok) {
-      alert("Napaka pri uploadu slike (status " + resp.status + ").");
-      return;
-    }
-
-    const data = await resp.json();
-    if (!data.ok) {
-      alert("Napaka: " + (data.error || "neznana napaka."));
-      return;
-    }
-
-    const statusEl = document.getElementById("status_text");
-    const previewWrapper = document.getElementById("preview_wrapper");
-    const previewImg = document.getElementById("preview_img");
-
-    statusEl.textContent = "Slika uspešno naložena";
-    statusEl.className = "badge bg-success";
-
-    if (data.url) {
-      previewWrapper.style.display = "block";
-      previewImg.src = data.url + "?_=" + Date.now();
-    } else {
-      // fallback: še enkrat preverimo, če se je pojavila
-      preveriSliko();
-    }
-
-  } catch (err) {
-    console.error(err);
-    alert("Prišlo je do napake pri uploadu slike.");
-  }
+  const file = document.getElementById('file_input').files[0];
+  const filename = document.getElementById('predlagano_ime').value.trim();
+  if (!file || !filename) { alert('Izberi sliko in ime datoteke.'); return; }
+  const form = new FormData(); form.append('file', file); form.append('filename', filename);
+  const response = await fetch('/api/upload_sliko', {method:'POST', body:form});
+  const data = await response.json();
+  if (!response.ok || !data.ok) { alert(data.error || 'Nalaganje ni uspelo.'); return; }
+  alert('Slika je naložena.'); preveriSliko();
 }
 
-function kopirajIme() {
-  const v = document.getElementById("predlagano_ime").value.trim();
-  if (!v) {
-    alert("Ni imena za kopiranje.");
-    return;
-  }
-  navigator.clipboard.writeText(v).then(
-    () => alert("Ime slike skopirano v odložišče."),
-    () => alert("Kopiranje ni uspelo (brskalnik ne podpira ali je blokirano).")
-  );
-}
+function kopirajIme() { navigator.clipboard.writeText(document.getElementById('predlagano_ime').value); }
 </script>
 {% endblock %}

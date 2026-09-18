@@ -1908,12 +1908,16 @@ def _image_directories():
 
 
 def _find_image_for_clue(opis, geslo=""):
-    """Poišče sliko v novem in starem VUS; dodatno geslo velja za slug."""
-    # Kadar je geslo podano, preverimo samo kombinirano ime slike.
-    # Tako ne dobimo lažnega zadetka za splošni opis drugega gesla.
-    bases = [os.path.splitext(make_image_filename_from_opis(opis, geslo))[0]]
-    if not geslo:
-        bases.append(os.path.splitext(make_image_filename_from_opis(opis, ""))[0])
+    """Poišče sliko v novem in starem VUS-u po vseh dosedanjih pravilih poimenovanja."""
+    # Slike so bile v VUS-u skozi čas shranjene na tri načine:
+    # po opisu, samo po geslu ali po opisu + geslu. Pri iskanju po geslu
+    # moramo zato preveriti vse tri, sicer npr. obstoječi INFARKT ostane skrit.
+    bases = [os.path.splitext(make_image_filename_from_opis(opis, ""))[0]]
+    if geslo:
+        bases.extend([
+            os.path.splitext(make_image_filename_from_opis(geslo, ""))[0],
+            os.path.splitext(make_image_filename_from_opis(opis, geslo))[0],
+        ])
     for source, directory, prefix in _image_directories():
         if not directory.exists():
             continue
