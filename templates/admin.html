@@ -51,15 +51,16 @@
   </form>
 
   <form method="post"
-        action="{{ url_for('admin_uvoz_cc_all') }}"
-        onsubmit="return confirm('Uvozim naloženi CC CSV v VUS.db? Postopek lahko traja nekaj časa.');">
-    <button type="submit" class="btn btn-primary">UVOZI GESLA IZ CC</button>
-  </form>
-
-  <form method="post"
-        action="{{ url_for('admin_obnovi_zadnji_uvoz_cc') }}"
-        onsubmit="return confirm('Obnovim bazo na stanje pred zadnjim CC uvozom?');">
-    <button type="submit" class="btn btn-outline-danger">OBNOVI ZADNJI UVOZ</button>
+        action="{{ url_for('admin_nalozi_preverjeno_bazo') }}"
+        enctype="multipart/form-data"
+        class="d-flex flex-wrap align-items-end gap-2"
+        onsubmit="return confirm('Naložim preverjeno bazo? Trenutna baza bo najprej varnostno kopirana.');">
+    <div>
+      <label for="verifiedDb" class="form-label mb-1">Preverjena baza iz računalnika</label>
+      <input id="verifiedDb" class="form-control" type="file" name="file"
+             accept=".db,application/x-sqlite3" required>
+    </div>
+    <button type="submit" class="btn btn-success">NALOŽI PREVERJENO BAZO</button>
   </form>
 </div>
 
