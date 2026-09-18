@@ -43,6 +43,15 @@ def _column_index(header, allowed, label):
     raise ValueError(f"V CSV ne najdem stolpca za {label}. Glava: {header}")
 
 
+def _find_column_index(header, allowed):
+    """Vrne stolpec, če CSV ima glavo; sicer None."""
+    columns = [_normalise(value).lower().lstrip("\ufeff") for value in header]
+    for index, name in enumerate(columns):
+        if name in allowed:
+            return index
+    return None
+
+
 def _refresh_sortiran(connection):
     connection.execute("DELETE FROM slovar_sortiran")
     connection.execute("""
@@ -68,13 +77,28 @@ def run(csv_path, db_path, *, dry_run=False, verbose=False, **_unused):
         header = next(reader, None)
         if not header:
             raise ValueError("CC CSV je prazen.")
-        word_index = _column_index(header, WORD_COLUMNS, "geslo (Word/Answer)")
-        clue_index = _column_index(header, CLUE_COLUMNS, "opis (Clue)")
+        word_index = _find_column_index(header, WORD_COLUMNS)
+        clue_index = _find_column_index(header, CLUE_COLUMNS)
+
+        # Crossword Compiler izvozi CSV navadno brez glave: prvi dve polji
+        # sta že geslo in opis. Če glava obstaja, jo seveda preskočimo.
+        if word_index is None or clue_index is None:
+            word_index, clue_index = 0, 1
+            rows = [header]
+        else:
+            rows = []
 
         # Set odstrani ponovitve znotraj istega izvoza, ne pa razlicnih opisov
         # istega gesla.
         pairs = set()
         invalid = 0
+        for row in rows:
+            word = _normalise(row[word_index] if word_index < len(row) else "")
+            clue = _normalise(row[clue_index] if clue_index < len(row) else "")
+            if word and clue:
+                pairs.add((word, clue))
+            else:
+                invalid += 1
         for row in reader:
             word = _normalise(row[word_index] if word_index < len(row) else "")
             clue = _normalise(row[clue_index] if clue_index < len(row) else "")
