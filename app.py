@@ -54,6 +54,10 @@ UVOZ_CC_ALL_STATUS = {
     "last_error": None,
 }
 
+# Menjava baze je namenoma serijska: med nalaganjem ali zamenjavo ne sme teči
+# stari neposredni CC uvoz.
+DB_SWAP_LOCK = threading.Lock()
+
 def normaliziraj_geslo(s: str) -> str:
     """
     Odstrani šumnike/naglase in posebne znake, da dobimo "čisto" osnovo
@@ -1039,18 +1043,100 @@ CC_CSV_PATH = (os.getenv("CC_CLUES_PATH") or "/var/data/cc_clues_DISPLAY_UTF8.cs
 @app.post("/admin/uvoz-cc-all")
 @login_required
 def admin_uvoz_cc_all():
-    global UVOZ_CC_ALL_STATUS
+    flash(
+        "Neposredni uvoz iz CC je iz varnostnih razlogov izključen. "
+        "Uporabi preverjeno delovno bazo in gumb »NALOŽI PREVERJENO BAZO«.",
+        "warning",
+    )
+    return redirect(url_for("admin"))
 
+
+def _validate_vus_database(path: Path) -> int:
+    """Preveri samostojno SQLite bazo, preden jo smemo dati v uporabo."""
+    uri = f"file:{path.as_posix()}?mode=ro"
+    with sqlite3.connect(uri, uri=True) as con:
+        check = con.execute("PRAGMA integrity_check").fetchone()[0]
+        if check != "ok":
+            raise ValueError(f"SQLite integrity_check ni uspel: {check}")
+
+        tables = {
+            row[0]
+            for row in con.execute("SELECT name FROM sqlite_master WHERE type='table'")
+        }
+        required = {"slovar", "slovar_sortiran"}
+        missing = required - tables
+        if missing:
+            raise ValueError("V bazi manjkajo tabele: " + ", ".join(sorted(missing)))
+
+        columns = {row[1].lower() for row in con.execute("PRAGMA table_info(slovar)")}
+        if not {"geslo", "opis"}.issubset(columns):
+            raise ValueError("Tabela slovar nima zahtevanih stolpcev geslo in opis.")
+
+        total = con.execute("SELECT COUNT(*) FROM slovar").fetchone()[0]
+        if total < 1000:
+            raise ValueError(f"Baza ima sumljivo malo zapisov ({total}).")
+    return total
+
+
+def _backup_live_database(source: Path, backup: Path) -> str:
+    """Naredi konsistentno kopijo žive baze; ob že okvarjeni bazi ohrani surovo kopijo."""
+    tmp = backup.with_suffix(".writing")
+    tmp.unlink(missing_ok=True)
+    try:
+        with sqlite3.connect(source) as src, sqlite3.connect(tmp) as dst:
+            src.backup(dst)
+        _validate_vus_database(tmp)
+        tmp.replace(backup)
+        return "preverjena varnostna kopija"
+    except Exception:
+        tmp.unlink(missing_ok=True)
+        # Že okvarjene žive baze ne moremo prikazati kot zdrave kopije,
+        # jo pa ohranimo za morebitno kasnejšo analizo.
+        raw_backup = backup.with_name(backup.stem + "_nepreverjena.db")
+        shutil.copy2(source, raw_backup)
+        return "nepreverjena surova kopija (prejšnja baza je bila že okvarjena)"
+
+
+@app.post("/admin/nalozi-preverjeno-bazo")
+@login_required
+def admin_nalozi_preverjeno_bazo():
     if UVOZ_CC_ALL_STATUS["running"]:
-        flash("Uvoz iz CC že teče. Počakaj na zaključek.", "warning")
+        flash("Počakaj, da se morebitni stari uvoz zaključi.", "warning")
         return redirect(url_for("admin"))
 
-    UVOZ_CC_ALL_STATUS["running"] = True
-    UVOZ_CC_ALL_STATUS["last_msg"] = None
-    UVOZ_CC_ALL_STATUS["last_error"] = None
-    thread = threading.Thread(target=_run_uvoz_cc_all_bg, daemon=True)
-    thread.start()
-    flash("Uvoz iz CC se izvaja v ozadju. Stran lahko pustiš odprto.", "info")
+    uploaded = request.files.get("file")
+    if not uploaded or not uploaded.filename:
+        flash("Izberi preverjeno datoteko VUS_CC_preverjena.db.", "warning")
+        return redirect(url_for("admin"))
+    if not uploaded.filename.lower().endswith(".db"):
+        flash("Izbrana datoteka ni SQLite baza s končnico .db.", "danger")
+        return redirect(url_for("admin"))
+
+    db_path = Path(DB_PATH)
+    staged = db_path.with_name(db_path.name + ".uploading")
+    backup = db_path.with_name(db_path.stem + "_backup_pred_zamenjavo.db")
+
+    with DB_SWAP_LOCK:
+        try:
+            staged.unlink(missing_ok=True)
+            uploaded.save(str(staged))
+            if staged.stat().st_size < 4096:
+                raise ValueError("Naložena datoteka je prazna ali premajhna.")
+
+            total = _validate_vus_database(staged)
+            backup_note = _backup_live_database(db_path, backup)
+
+            # staged in živa baza sta na istem trajnem disku, zato je replace atomaren.
+            staged.replace(db_path)
+            flash(
+                f"Preverjena baza je aktivna: {total:,} gesel. "
+                f"Ustvarjena je {backup_note} prejšnje baze.",
+                "success",
+            )
+        except Exception as e:
+            staged.unlink(missing_ok=True)
+            flash(f"Baza ni bila zamenjana: {e}", "danger")
+
     return redirect(url_for("admin"))
 
 
