@@ -1897,88 +1897,78 @@ def prispevaj_geslo():
 def preveri_slika():
     return render_template("preveri_sliko.html")
 
+def _image_directories():
+    """Aktualni imenik slik in, lokalno, tudi stari VUS."""
+    current = Path(app.static_folder) / "Images"
+    old_default = r"C:\\Users\\bormi\\Documents\\vus-flask2\\static\\Images"
+    old = Path((os.getenv("VUS_OLD_IMAGES_DIR") or old_default).strip())
+    return [("novi VUS", current, "/static/Images/")] + (
+        [("stari VUS", old, "/images-old/")] if old.exists() and old != current else []
+    )
+
+
+def _find_image_for_clue(opis, geslo=""):
+    """Poišče sliko v novem in starem VUS; dodatno geslo velja za slug."""
+    # Kadar je geslo podano, preverimo samo kombinirano ime slike.
+    # Tako ne dobimo lažnega zadetka za splošni opis drugega gesla.
+    bases = [os.path.splitext(make_image_filename_from_opis(opis, geslo))[0]]
+    if not geslo:
+        bases.append(os.path.splitext(make_image_filename_from_opis(opis, ""))[0])
+    for source, directory, prefix in _image_directories():
+        if not directory.exists():
+            continue
+        for base in dict.fromkeys(bases):
+            for extension in (".jpg", ".jpeg", ".png", ".webp"):
+                for suffix in [""] + [f" ({number})" for number in range(1, 21)]:
+                    name = f"{base}{suffix}{extension}"
+                    if (directory / name).is_file():
+                        return {"exists": True, "filename": name,
+                                "preview_url": prefix + name, "source": source}
+    return {"exists": False, "filename": None, "preview_url": None, "source": None}
+
+
+@app.get("/images-old/<path:filename>")
+def images_old(filename):
+    old_default = r"C:\\Users\\bormi\\Documents\\vus-flask2\\static\\Images"
+    directory = Path((os.getenv("VUS_OLD_IMAGES_DIR") or old_default).strip())
+    if not directory.is_dir():
+        abort(404)
+    return send_from_directory(directory, filename)
+
+
 @app.post("/api/preveri_sliko")
-@login_required
 def api_preveri_sliko():
-    """
-    Bulletproof:
-    - naredi slug iz (opis + dodatno) in iz (opis)
-    - poišče realno obstoječo sliko v static/Images (tudi (1), (2) …)
-    - vrne preview_url, ki kaže na NAJDENO datoteko (prava končnica!)
-    - vrne filename, ki je predlagano ime za upload/input (lahko .jpg)
-    """
-    import os, sys, pprint
-    from flask import request, jsonify
-
     data = request.get_json(silent=True) or {}
-    print("api_preveri_sliko data =", pprint.pformat(data), file=sys.stderr)
+    geslo = (data.get("geslo") or data.get("dodatno") or "").strip()
+    opis_filter = (data.get("opis") or "").strip()
+    matches = []
 
-    opis    = (data.get("opis") or "").strip()
-    dodatno = (data.get("dodatno_ime") or data.get("dodatno") or "").strip()
+    if geslo:
+        with get_conn(readonly=True) as con:
+            sql = "SELECT geslo, opis FROM slovar WHERE geslo = ? COLLATE NOCASE"
+            params = [geslo]
+            if opis_filter:
+                sql += " AND opis LIKE ? COLLATE NOCASE"
+                params.append(f"%{opis_filter}%")
+            sql += " ORDER BY opis COLLATE NOCASE LIMIT 100"
+            rows = con.execute(sql, params).fetchall()
+        for row in rows:
+            row_geslo, row_opis = row[0], row[1]
+            found = _find_image_for_clue(row_opis, row_geslo)
+            matches.append({"geslo": row_geslo, "opis": row_opis,
+                            "suggested_filename": make_image_filename_from_opis(row_opis, row_geslo),
+                            **found})
+    elif opis_filter:
+        found = _find_image_for_clue(opis_filter)
+        matches.append({"geslo": "", "opis": opis_filter,
+                        "suggested_filename": make_image_filename_from_opis(opis_filter), **found})
+    else:
+        return jsonify(ok=False, error="Vnesi geslo ali opis."), 400
 
-    # make_image_filename_from_opis vrne npr. "nekaj.jpg"
-    fname_full = make_image_filename_from_opis(opis, dodatno)
-    fname_base = make_image_filename_from_opis(opis, "")
-
-    slug_full = os.path.splitext(fname_full)[0] if fname_full else ""
-    slug_base = os.path.splitext(fname_base)[0] if fname_base else ""
-
-    images_dir = os.path.join(app.static_folder, "Images")  # velik I
-    exts = [".jpg", ".jpeg", ".png", ".webp"]
-
-    def find_existing_for_slug(slug: str):
-        if not slug:
-            return None
-
-        # 1) direkt slug.ext
-        for ext in exts:
-            cand = slug + ext
-            if os.path.exists(os.path.join(images_dir, cand)):
-                return cand
-
-        # 2) duplikati slug (1).ext ... (20)
-        for i in range(1, 21):
-            for ext in exts:
-                cand = f"{slug} ({i}){ext}"
-                if os.path.exists(os.path.join(images_dir, cand)):
-                    return cand
-
-        return None
-
-    # ✅ vedno probaj oba (brez if dodatno), ker nič ne stane
-    found = find_existing_for_slug(slug_full) or find_existing_for_slug(slug_base)
-    exists = bool(found)
-
-    # ✅ to je edini URL, ki ga sme frontend dat v <img src=...>
-    preview_url = f"/static/Images/{found}" if exists else None
-
-    # ✅ predlagano ime za upload/input (lahko ostane .jpg, ker je “predlog”)
-    suggested_slug = slug_full if dodatno else slug_base
-    suggested_filename = (suggested_slug + ".jpg") if suggested_slug else ""
-
-    # debug (če boš še lovil)
-    print("DEBUG images_dir =", images_dir, file=sys.stderr)
-    print("DEBUG slug_full  =", slug_full, file=sys.stderr)
-    print("DEBUG slug_base  =", slug_base, file=sys.stderr)
-    print("DEBUG found      =", found, file=sys.stderr)
-    print("DEBUG preview_url=", preview_url, file=sys.stderr)
-
-    return jsonify({
-        "ok": True,
-        "exists": exists,
-
-        # 👇 za PRIKAZ SLIKE (to uporabi frontend za <img>)
-        "preview_url": preview_url,
-        "found_filename": found,
-
-        # 👇 za UI/input (ime, ki ga pokažeš uporabniku)
-        "suggested_filename": suggested_filename,
-
-        # 👇 če tvoj frontend že uporablja data.filename za input, naj ostane to
-        "filename": suggested_filename,
-
-        "slug": suggested_slug,
-    })
+    direct_name = make_image_filename_from_opis(opis_filter, geslo) if opis_filter else ""
+    return jsonify(ok=True, exists=any(item["exists"] for item in matches),
+                   matches=matches, suggested_filename=direct_name,
+                   filename=direct_name, preview_url=(matches[0]["preview_url"] if matches else None))
 
 @app.post("/api/upload_sliko")
 @login_required
