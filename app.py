@@ -1987,14 +1987,19 @@ def _image_directories():
     """Vsi uporabljeni imeniki slik: novi, starejši v istem projektu in stari VUS."""
     current = Path(app.static_folder) / "Images"
     legacy_current = Path(app.static_folder) / "Krizanke" / "Slike"
-    old_default = r"C:\\Users\\bormi\\Documents\\vus-flask2\\static\\Images"
-    old = Path((os.getenv("VUS_OLD_IMAGES_DIR") or old_default).strip())
+    old = _old_images_directory()
     directories = [("novi VUS", current, "/static/Images/")]
     if legacy_current.exists() and legacy_current != current:
         directories.append(("novi VUS – stari imenik", legacy_current, "/static/Krizanke/Slike/"))
     if old.exists() and old != current:
         directories.append(("stari VUS", old, "/images-old/"))
     return directories
+
+
+def _old_images_directory():
+    """Lokalni arhiv slik iz starega VUS-a (nastavljiv z VUS_OLD_IMAGES_DIR)."""
+    old_default = r"C:\\Users\\bormi\\Documents\\vus-flask2\\static\\Images"
+    return Path((os.getenv("VUS_OLD_IMAGES_DIR") or old_default).strip())
 
 
 def _find_image_for_clue(opis, geslo=""):
@@ -2029,11 +2034,37 @@ def _find_image_for_clue(opis, geslo=""):
 
 @app.get("/images-old/<path:filename>")
 def images_old(filename):
-    old_default = r"C:\\Users\\bormi\\Documents\\vus-flask2\\static\\Images"
-    directory = Path((os.getenv("VUS_OLD_IMAGES_DIR") or old_default).strip())
+    directory = _old_images_directory()
     if not directory.is_dir():
         abort(404)
     return send_from_directory(directory, filename)
+
+
+@app.post("/api/kopiraj_staro_sliko")
+def api_kopiraj_staro_sliko():
+    """Prekopira eno že najdeno sliko iz starega lokalnega VUS-a v Clean."""
+    data = request.get_json(silent=True) or {}
+    filename = (data.get("filename") or "").strip()
+
+    # Dovolimo izključno golo ime datoteke: brez map in brez prepisovanja.
+    if not filename or Path(filename).name != filename:
+        return jsonify(ok=False, error="Neveljavno ime slike."), 400
+    if Path(filename).suffix.lower() not in {".jpg", ".jpeg", ".png", ".webp"}:
+        return jsonify(ok=False, error="Datoteka ni podprta slika."), 400
+
+    source = _old_images_directory() / filename
+    if not source.is_file():
+        return jsonify(ok=False, error="Slike v starem VUS-u ne najdem."), 404
+
+    destination_dir = Path(app.static_folder) / "Images"
+    destination_dir.mkdir(parents=True, exist_ok=True)
+    destination = destination_dir / filename
+    if destination.exists():
+        return jsonify(ok=True, status="already_exists", filename=filename)
+
+    shutil.copy2(source, destination)
+    print("PREKOPIRANA SLIKA V CLEAN:", destination)
+    return jsonify(ok=True, status="copied", filename=filename)
 
 
 @app.post("/api/preveri_sliko")
