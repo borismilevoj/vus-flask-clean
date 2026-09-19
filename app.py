@@ -1998,12 +1998,16 @@ def _find_image_for_clue(opis, geslo=""):
     # Slike so bile v VUS-u skozi čas shranjene na tri načine:
     # po opisu, samo po geslu ali po opisu + geslu. Pri iskanju po geslu
     # moramo zato preveriti vse tri, sicer npr. obstoječi INFARKT ostane skrit.
-    bases = [os.path.splitext(make_image_filename_from_opis(opis, ""))[0]]
+    description_base = os.path.splitext(make_image_filename_from_opis(opis, ""))[0]
+    bases = [description_base]
     if geslo:
-        bases.extend([
-            os.path.splitext(make_image_filename_from_opis(geslo, ""))[0],
+        # Najprej točno novejše ime (opis + geslo). Kratko ime po geslu
+        # pride šele na koncu, ker lahko pri starih slikah zadene drugo sliko.
+        bases = [
             os.path.splitext(make_image_filename_from_opis(opis, geslo))[0],
-        ])
+            description_base,
+            os.path.splitext(make_image_filename_from_opis(geslo, ""))[0],
+        ]
     for source, directory, prefix in _image_directories():
         if not directory.exists():
             continue
