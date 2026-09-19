@@ -1984,13 +1984,17 @@ def preveri_slika():
     return render_template("preveri_sliko.html")
 
 def _image_directories():
-    """Aktualni imenik slik in, lokalno, tudi stari VUS."""
+    """Vsi uporabljeni imeniki slik: novi, starejši v istem projektu in stari VUS."""
     current = Path(app.static_folder) / "Images"
+    legacy_current = Path(app.static_folder) / "Krizanke" / "Slike"
     old_default = r"C:\\Users\\bormi\\Documents\\vus-flask2\\static\\Images"
     old = Path((os.getenv("VUS_OLD_IMAGES_DIR") or old_default).strip())
-    return [("novi VUS", current, "/static/Images/")] + (
-        [("stari VUS", old, "/images-old/")] if old.exists() and old != current else []
-    )
+    directories = [("novi VUS", current, "/static/Images/")]
+    if legacy_current.exists() and legacy_current != current:
+        directories.append(("novi VUS – stari imenik", legacy_current, "/static/Krizanke/Slike/"))
+    if old.exists() and old != current:
+        directories.append(("stari VUS", old, "/images-old/"))
+    return directories
 
 
 def _find_image_for_clue(opis, geslo=""):
@@ -2008,10 +2012,12 @@ def _find_image_for_clue(opis, geslo=""):
             description_base,
             os.path.splitext(make_image_filename_from_opis(geslo, ""))[0],
         ]
-    for source, directory, prefix in _image_directories():
-        if not directory.exists():
-            continue
-        for base in dict.fromkeys(bases):
+    # Najprej preveri isto, najbolj natančno ime v vseh imenikih. Tako
+    # kratka stara imena (npr. ac_dc) ne prehitijo prave slike po opisu.
+    for base in dict.fromkeys(bases):
+        for source, directory, prefix in _image_directories():
+            if not directory.exists():
+                continue
             for extension in (".jpg", ".jpeg", ".png", ".webp"):
                 for suffix in [""] + [f" ({number})" for number in range(1, 21)]:
                     name = f"{base}{suffix}{extension}"
