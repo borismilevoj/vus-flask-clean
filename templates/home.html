@@ -175,8 +175,10 @@
         idealno za križanke, kjer imaš samo del rešitve.
       </p>
     </div>
-    <div class="d-flex justify-content-between align-items-center">
-      <a href="{{ url_for('isci_vzorec') }}" class="btn btn-sm btn-success">
+    <div class="d-flex flex-column align-items-start gap-2">
+      <a href="{{ url_for('isci_vzorec') }}"
+         class="btn btn-sm btn-success"
+         style="min-width: 145px; white-space: nowrap;">
         Odpri iskanje
       </a>
       <small>Podpira tudi dodatni opis (poklic, letnica …)</small>
@@ -192,14 +194,14 @@
         Rešuj aktualno križanko. Gesla so povezana z VUS bazo,
         zato dobiš bogate opise in slike.
       </p>
-    </div>
+        </div>
 
-    <div class="d-flex justify-content-between align-items-center">
-      <div class="btn-group btn-group-sm">
-        <a href="{{ url_for('krizanka') }}" class="btn btn-outline-primary">
-          Današnja
-        </a>
-      </div>
+    <div class="d-flex flex-column align-items-start gap-2">
+      <a href="{{ url_for('krizanka') }}"
+         class="btn btn-sm btn-outline-primary"
+         style="min-width: 145px; white-space: nowrap;">
+        Današnja
+      </a>
 
       <small>Klasika + skandinavski stil</small>
     </div>
@@ -214,16 +216,22 @@
         Izberi težavnost in reši sudoku v brskalniku. V arhivu lahko vedno skočiš
         na pretekle dneve.
       </p>
-    </div>
-    <div class="d-flex justify-content-between align-items-center">
-      <div class="btn-group btn-group-sm">
-        <a href="{{ url_for('osnovni_sudoku_default') }}" class="btn btn-outline-warning">
+        </div>
+
+    <div class="d-flex flex-column align-items-start gap-2">
+      <div class="d-flex flex-wrap gap-2">
+        <a href="{{ url_for('osnovni_sudoku_default') }}"
+           class="btn btn-sm btn-outline-warning"
+           style="white-space: nowrap;">
           Današnji
         </a>
-        <a href="{{ url_for('arhiv_sudoku_pregled', tezavnost='medium') }}" class="btn btn-outline-warning">
+        <a href="{{ url_for('arhiv_sudoku_pregled', tezavnost='medium') }}"
+           class="btn btn-sm btn-outline-warning"
+           style="white-space: nowrap;">
           Arhiv (srednja)
         </a>
       </div>
+
       <small>Very easy → hard</small>
     </div>
   </div>
@@ -238,10 +246,12 @@
         uredi in po potrditvi doda v glavno bazo.
       </p>
     </div>
-    <div class="d-flex justify-content-between align-items-center">
-      <a href="{{ url_for('prispevaj_geslo') }}" class="btn btn-sm btn-outline-secondary">
-        Prispevaj geslo
-      </a>
+    <div class="d-flex flex-column align-items-start gap-2">
+    <a href="{{ url_for('prispevaj_geslo') }}"
+   class="btn btn-sm btn-outline-secondary text-nowrap flex-shrink-0"
+   style="min-width: 145px; white-space: nowrap;">
+  Prispevaj geslo
+</a>
       <small>Pomagaš graditi največji ugankarski slovar.</small>
     </div>
   </div>
