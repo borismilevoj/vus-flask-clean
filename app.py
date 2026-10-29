@@ -163,10 +163,13 @@ COUNT_FILE = Path(app.root_path) / "data" / "count.txt"
 
 def read_passwords_count():
     try:
-        txt = COUNT_FILE.read_text(encoding="utf-8").strip()
-        return int(txt.replace(".", "").replace(" ", ""))
+        con = get_conn(readonly=True)
+        try:
+            return con.execute("SELECT COUNT(*) FROM slovar").fetchone()[0]
+        finally:
+            con.close()
     except Exception as e:
-        print("COUNT_FILE problem:", COUNT_FILE, "exists=", COUNT_FILE.exists(), "err=", e)
+        print("Napaka pri branju stevca iz VUS.db:", e)
         return None
 
 
