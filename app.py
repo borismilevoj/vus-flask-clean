@@ -1033,6 +1033,23 @@ def api_preveri_legacy():
 def admin():
     return render_template("admin.html", DB_PATH=DB_PATH)
 
+@app.get("/admin/prispevki")
+@login_required
+def admin_prispevki():
+    pot = Path("/var/data/prispevki.txt") if Path("/var/data").is_dir() else Path("prispevki.txt")
+    prispevki = []
+    if pot.is_file():
+        with pot.open("r", encoding="utf-8") as datoteka:
+            for vrstica in datoteka:
+                deli = vrstica.rstrip("\r\n").split(" | ", 3)
+                if len(deli) == 4:
+                    datum, predlagatelj, geslo, opis = deli
+                    prispevki.append({"datum": datum, "predlagatelj": predlagatelj,
+                                      "geslo": geslo, "opis": opis})
+    prispevki.reverse()
+    return render_template("admin_prispevki.html", prispevki=prispevki)
+
+
 
 from pathlib import Path
 
