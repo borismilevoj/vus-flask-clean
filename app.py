@@ -1967,7 +1967,10 @@ def prispevaj_geslo():
             )
 
         # za zdaj predlog samo shranimo v tekstovno datoteko
-        with open("prispevki.txt", "a", encoding="utf-8") as f:
+        with open(
+            "/var/data/prispevki.txt" if Path("/var/data").is_dir() else "prispevki.txt",
+            "a", encoding="utf-8"
+        ) as f:
             f.write(f"{datetime.now().isoformat()} | {uporabnik} | {geslo} | {opis}\n")
 
         return render_template(
