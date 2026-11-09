@@ -1033,22 +1033,154 @@ def api_preveri_legacy():
 def admin():
     return render_template("admin.html", DB_PATH=DB_PATH)
 
+# ADMIN PRISPEVKI - arhiv in varna obdelava
+import hashlib
+from datetime import datetime as _prispevki_datetime
+
+def _prispevki_pot():
+    return (Path("/var/data/prispevki.txt")
+            if os.name != "nt" and Path("/var/data").is_dir()
+            else Path(__file__).resolve().parent / "prispevki.txt")
+
+def _ustvari_arhiv_prispevkov(con):
+    con.execute("""
+        CREATE TABLE IF NOT EXISTS arhiv_prispevkov (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            izvirni_id INTEGER NOT NULL,
+            kontrola TEXT NOT NULL,
+            datum_oddaje TEXT,
+            predlagatelj TEXT,
+            prvotno_geslo TEXT,
+            prvotni_opis TEXT,
+            koncno_geslo TEXT,
+            koncni_opis TEXT,
+            status TEXT NOT NULL CHECK (status IN ('potrjen', 'zavrnjen')),
+            datum_obdelave TEXT NOT NULL,
+            slovar_id INTEGER,
+            UNIQUE (kontrola, izvirni_id)
+        )
+    """)
+
+@app.post("/admin/prispevki/obdelaj")
+@login_required
+def admin_obdelaj_prispevek():
+    podatki = request.get_json(silent=True) or {}
+    try:
+        izvirni_id = int(podatki.get("id", 0))
+    except (TypeError, ValueError):
+        return jsonify(ok=False, msg="Neveljaven ID prispevka."), 400
+    kontrola = str(podatki.get("kontrola") or "")
+    dejanje = str(podatki.get("dejanje") or "")
+    geslo = " ".join(str(podatki.get("geslo") or "").split()).strip()
+    opis = " ".join(str(podatki.get("opis") or "").split()).strip()
+    if izvirni_id < 1 or len(kontrola) != 64 or dejanje not in ("potrjen", "zavrnjen"):
+        return jsonify(ok=False, msg="Neveljavna zahteva."), 400
+    if dejanje == "potrjen" and (not geslo or not opis):
+        return jsonify(ok=False, msg="Vnesi geslo in opis."), 400
+    if len(geslo) > 200 or len(opis) > 4000:
+        return jsonify(ok=False, msg="Geslo ali opis je predolg."), 400
+
+    con = None
+    try:
+        con = get_conn(readonly=False)
+        con.execute("BEGIN IMMEDIATE")
+        _ustvari_arhiv_prispevkov(con)
+        pot = _prispevki_pot()
+        with pot.open("r", encoding="utf-8") as f:
+            # Izvirni ID je stevilka vrstice; datoteke ne prepisujemo.
+            vrstica = next((v for i, v in enumerate(f, 1) if i == izvirni_id), None)
+        if vrstica is None:
+            con.rollback()
+            return jsonify(ok=False, msg="Prispevek ne obstaja vec."), 409
+        izvirnik = vrstica.rstrip("\r\n")
+        if hashlib.sha256(izvirnik.encode("utf-8")).hexdigest() != kontrola:
+            con.rollback()
+            return jsonify(ok=False, msg="Prispevek se je spremenil. Osvezi stran."), 409
+        deli = izvirnik.split(" | ", 3)
+        if len(deli) != 4:
+            con.rollback()
+            return jsonify(ok=False, msg="Neveljaven izvirni zapis."), 409
+        if con.execute("SELECT 1 FROM arhiv_prispevkov WHERE izvirni_id=? AND kontrola=?",
+                       (izvirni_id, kontrola)).fetchone():
+            con.rollback()
+            return jsonify(ok=False, msg="Prispevek je ze obdelan. Osvezi stran."), 409
+
+        datum, predlagatelj, prvotno_geslo, prvotni_opis = deli
+        slovar_id = None
+        if dejanje == "potrjen":
+            # Isti opis za isto geslo je dvojnik; drugi pomeni so dovoljeni.
+            dvojnik = con.execute("""
+                SELECT id FROM slovar
+                WHERE lower(replace(trim(geslo), ' ', '')) = lower(replace(?, ' ', ''))
+                  AND lower(trim(opis)) = lower(trim(?)) LIMIT 1
+            """, (geslo, opis)).fetchone()
+            if dvojnik:
+                con.rollback()
+                return jsonify(ok=False, msg="Enako geslo z enakim opisom ze obstaja (ID %s)." % dvojnik[0]), 409
+            cur = con.execute("INSERT INTO slovar (geslo, opis) VALUES (?, ?)", (geslo, opis))
+            slovar_id = cur.lastrowid
+        con.execute("""
+            INSERT INTO arhiv_prispevkov
+            (izvirni_id, kontrola, datum_oddaje, predlagatelj,
+             prvotno_geslo, prvotni_opis, koncno_geslo, koncni_opis,
+             status, datum_obdelave, slovar_id)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        """, (izvirni_id, kontrola, datum, predlagatelj,
+              prvotno_geslo, prvotni_opis, geslo, opis,
+              dejanje, _prispevki_datetime.now().isoformat(), slovar_id))
+        con.commit()
+        return jsonify(ok=True, msg=("Prispevek potrjen in shranjen v slovar."
+                                     if dejanje == "potrjen" else "Prispevek zavrnjen in arhiviran."))
+    except Exception as e:
+        if con is not None:
+            con.rollback()
+        app.logger.exception("Napaka pri obdelavi prispevka")
+        return jsonify(ok=False, msg="Obdelava ni uspela. Preveri dnevnik Flask."), 500
+    finally:
+        if con is not None:
+            con.close()
+
+
 @app.get("/admin/prispevki")
 @login_required
 def admin_prispevki():
-    pot = Path("/var/data/prispevki.txt") if Path("/var/data").is_dir() else Path("prispevki.txt")
+    pot = (Path("/var/data/prispevki.txt") if os.name != "nt" and Path("/var/data").is_dir() else Path(__file__).resolve().parent / "prispevki.txt")
     prispevki = []
     if pot.is_file():
         with pot.open("r", encoding="utf-8") as datoteka:
-            for vrstica in datoteka:
+            for stevilka, vrstica in enumerate(datoteka, start=1):
                 deli = vrstica.rstrip("\r\n").split(" | ", 3)
                 if len(deli) == 4:
                     datum, predlagatelj, geslo, opis = deli
-                    prispevki.append({"datum": datum, "predlagatelj": predlagatelj,
-                                      "geslo": geslo, "opis": opis})
+                    prispevki.append({
+                        "id": stevilka,
+                        "kontrola": __import__("hashlib").sha256(
+                            vrstica.rstrip("\r\n").encode("utf-8")
+                        ).hexdigest(),
+                        "datum": datum,
+                        "predlagatelj": predlagatelj,
+                        "geslo": geslo,
+                        "opis": opis
+                    })
+    con = get_conn(readonly=False)
+    try:
+        _ustvari_arhiv_prispevkov(con)
+        obdelani = {
+            (row[0], row[1])
+            for row in con.execute(
+                "SELECT izvirni_id, kontrola FROM arhiv_prispevkov"
+            )
+        }
+    finally:
+        con.close()
+
+    prispevki = [
+        p for p in prispevki
+        if (p["id"], p["kontrola"]) not in obdelani
+    ]
+
     prispevki.reverse()
     return render_template("admin_prispevki.html", prispevki=prispevki)
-
 
 
 from pathlib import Path
@@ -1984,10 +2116,7 @@ def prispevaj_geslo():
             )
 
         # za zdaj predlog samo shranimo v tekstovno datoteko
-        with open(
-            "/var/data/prispevki.txt" if Path("/var/data").is_dir() else "prispevki.txt",
-            "a", encoding="utf-8"
-        ) as f:
+        with _prispevki_pot().open("a", encoding="utf-8") as f:
             f.write(f"{datetime.now().isoformat()} | {uporabnik} | {geslo} | {opis}\n")
 
         return render_template(
