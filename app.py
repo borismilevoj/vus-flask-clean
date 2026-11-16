@@ -1900,21 +1900,23 @@ def _nalozi_mapo_slik_za_namige():
 
 def image_url_for_clue(opis: str, dodatno: str = "", prefer_ext: str = ".jpg") -> str:
     """
-    Bulletproof:
-    - proba slug po novem (npr. 30 besed)
-    - fallback na legacy slug (15 besed)
-    - proba več končnic
-    - najde tudi duplikate z ' (1)', ' (2)'...
-    - vrne točen URL /static/Images/<filename.ext> ali "" če nič ne najde
+    Iskanje slike:
+    1. najprej po točnem opisu;
+    2. nato po geslu in starih opisih istega gesla;
+    3. če ima geslo več pomenov, zahteva dovolj močno ujemanje opisa.
     """
-    images_dir = Path(app.static_folder) / "Images"  # Images z velikim I
+    import json
+    import re
+    import sqlite3
+    import unicodedata
+
+    images_dir = Path(app.static_folder) / "Images"
     if not images_dir.exists():
         return ""
 
     opis = (opis or "").strip()
     dodatno = (dodatno or "").strip()
-
-    # Najprej uporabi potrjeno povezavo gesla, opisa in slike.
+    # Najprej uporabi potrjeno povezavo med geslom, opisom in sliko.
     if opis and dodatno:
         mapa_slik = _nalozi_mapo_slik_za_namige()
         kljuc = _kljuc_slike_za_namig(dodatno, opis)
@@ -1924,57 +1926,136 @@ def image_url_for_clue(opis: str, dodatno: str = "", prefer_ext: str = ".jpg") -
             if Path(ime_slike).name == ime_slike:
                 if (images_dir / ime_slike).is_file():
                     return f"/static/Images/{ime_slike}"
+    def legacy_slug(text: str) -> str:
+        text = " ".join((text or "").split()[:15])
+        text = unicodedata.normalize("NFD", text)
+        text = "".join(ch for ch in text if not unicodedata.combining(ch))
+        text = text.lower()
+        text = re.sub(r"[^a-z0-9]+", "_", text)
+        return re.sub(r"_+", "_", text).strip("_")
 
-    # 1) kandidati slugov: novi + legacy (15)
-    slugs = []
+    def slugs_for(description: str, answer: str = "") -> list[str]:
+        result = []
 
-    # novi slug (tvoja make_image_filename_from_opis že ima MAX_IMAGE_WORDS=30)
-    s30 = make_image_filename_from_opis(opis, dodatno)
-    if s30:
-        slugs.append(s30)
+        for candidate in (
+            make_image_filename_from_opis(description, answer),
+            make_image_filename_from_opis(description, ""),
+            legacy_slug(f"{description} {answer}"),
+            legacy_slug(description),
+        ):
+            if candidate and candidate not in result:
+                result.append(candidate)
 
-    # legacy slug (15 besed) – isto pravilo, samo “odrežemo”
-    def make_slug_legacy_15(opis_: str, dodatno_: str = "") -> str:
-        import unicodedata, re
-        text = " ".join(part for part in [(opis_ or "").strip(), (dodatno_ or "").strip()] if part).strip()
-        if not text:
-            return "slika"
-        words = text.split()[:15]
-        s = " ".join(words)
-        s = unicodedata.normalize("NFD", s)
-        s = "".join(ch for ch in s if not unicodedata.combining(ch))
-        s = s.lower()
-        s = re.sub(r"[^a-z0-9]+", "_", s)
-        s = re.sub(r"_+", "_", s).strip("_")
-        return s or "slika"
+        return result
 
-    s15 = make_slug_legacy_15(opis, dodatno)
-    if s15 and s15 not in slugs:
-        slugs.append(s15)
+    exts = []
+    for ext in (prefer_ext, ".jpg", ".jpeg", ".png", ".webp"):
+        ext = (ext or "").lower().strip()
+        if not ext.startswith("."):
+            ext = "." + ext
+        if ext not in exts:
+            exts.append(ext)
 
-    if not slugs:
+    def find_file(slugs: list[str]) -> str:
+        duplicate_suffixes = [""] + [f" ({i})" for i in range(1, 6)]
+
+        for slug in slugs:
+            for ext in exts:
+                for suffix in duplicate_suffixes:
+                    filename = f"{slug}{suffix}{ext}"
+                    if (images_dir / filename).is_file():
+                        return filename
+
+        # Podpora za daljša imena, ki jih je ustvaril prenesi_krizanko.py.
+        for slug in slugs:
+            for ext in exts:
+                matches = sorted(images_dir.glob(f"{slug}_*{ext}"))
+                if matches:
+                    return matches[0].name
+
         return ""
 
-    # 2) končnice (unikatno + v smiselnem vrstnem redu)
-    exts = [prefer_ext, ".jpg", ".jpeg", ".png", ".webp"]
-    seen_ext = []
-    for e in exts:
-        e = (e or "").strip().lower()
-        if not e.startswith("."):
-            e = "." + e
-        if e not in seen_ext:
-            seen_ext.append(e)
+    def meaningful_words(text: str) -> set[str]:
+        text = unicodedata.normalize("NFD", text or "")
+        text = "".join(ch for ch in text if not unicodedata.combining(ch))
+        words = re.findall(r"[a-z0-9]+", text.lower())
 
-    # 3) proba: normal + " (1)" duplikati
-    #    (Windows style: "ime (1).jpg")
-    dup_suffixes = [""] + [f" ({i})" for i in range(1, 6)]
+        common = {
+            "slovenski", "slovenska", "slovensko", "oseba", "ki", "se",
+            "je", "in", "za", "na", "v", "z", "ter", "ali", "med",
+            "tudi", "kot", "pri", "nekdaj", "ok", "leta",
+        }
+        return {w for w in words if len(w) >= 4 and w not in common}
 
-    for slug in slugs:
-        for ext in seen_ext:
-            for suf in dup_suffixes:
-                fname = f"{slug}{suf}{ext}"
-                if (images_dir / fname).exists():
-                    return f"/static/Images/{fname}"
+    # 1. Točno ujemanje trenutnega opisa ima vedno prednost.
+    filename = find_file(slugs_for(opis, dodatno))
+    if filename:
+        return f"/static/Images/{filename}"
+
+    # 2. Iz baze preberi vse stare in nove opise istega gesla.
+    descriptions = []
+    if dodatno:
+        try:
+            conn = sqlite3.connect(str(DB_PATH))
+            rows = conn.execute(
+                """
+                SELECT DISTINCT opis
+                FROM slovar
+                WHERE UPPER(TRIM(geslo)) = UPPER(TRIM(?))
+                """,
+                (dodatno,),
+            ).fetchall()
+            conn.close()
+
+            descriptions = [
+                str(row[0]).strip()
+                for row in rows
+                if row and row[0] and str(row[0]).strip()
+            ]
+        except Exception:
+            descriptions = []
+
+    # 3. Pri geslu z enim pomenom je dovolj že najdena slika po starem opisu.
+    if len(descriptions) == 1:
+        filename = find_file(slugs_for(descriptions[0], dodatno))
+        if filename:
+            return f"/static/Images/{filename}"
+
+    # 4. Pri več pomenih (ČOTAR ipd.) uporabi opis kot filter.
+    #    Ne pokaže napačne slike, če ujemanje ni dovolj jasno.
+    if len(descriptions) > 1:
+        clue_words = meaningful_words(opis)
+        matches = []
+
+        for old_description in descriptions:
+            filename = find_file(slugs_for(old_description, dodatno))
+            if not filename:
+                continue
+
+            score = len(clue_words & meaningful_words(old_description))
+            if score >= 2:
+                matches.append((score, filename))
+
+        if matches:
+            highest_score = max(score for score, _ in matches)
+            best = sorted({filename for score, filename in matches if score == highest_score})
+
+            if len(best) == 1:
+                return f"/static/Images/{best[0]}"
+
+    # 5. Stara ročna povezava ostane samo za enopomenska gesla.
+    if dodatno and len(descriptions) <= 1:
+        try:
+            map_path = Path(app.root_path) / "data" / "image_map.json"
+            if map_path.exists():
+                with map_path.open("r", encoding="utf-8") as f:
+                    image_map = json.load(f)
+
+                mapped = image_map.get(dodatno.upper())
+                if mapped and (images_dir / mapped).is_file():
+                    return f"/static/Images/{mapped}"
+        except (OSError, ValueError, TypeError):
+            pass
 
     return ""
 

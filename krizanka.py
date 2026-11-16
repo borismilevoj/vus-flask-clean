@@ -1,8 +1,45 @@
 from pathlib import Path
 import xml.etree.ElementTree as ET
+import json
+import re
+import unicodedata
 
 # Namespace za <rectangular-puzzle> v Crossword Compiler XML
 NS_RP = {"rp": "http://crossword.info/xml/rectangular-puzzle"}
+CLUE_IMAGE_MAP_FILE = (
+    Path(__file__).resolve().parent / "data" / "clue_image_map.json"
+)
+
+
+def _normaliziraj_kljuc(vrednost):
+    besedilo = " ".join(str(vrednost or "").split())
+    besedilo = unicodedata.normalize("NFD", besedilo)
+    besedilo = "".join(
+        znak for znak in besedilo
+        if not unicodedata.combining(znak)
+    )
+    besedilo = besedilo.lower()
+    return re.sub(r"[^a-z0-9]+", "_", besedilo).strip("_")
+
+
+def _kljuc_slike(geslo, opis):
+    geslo_kljuc = _normaliziraj_kljuc(geslo).replace("_", "")
+    return f"{geslo_kljuc}|{_normaliziraj_kljuc(opis)}"
+
+
+def _nalozi_mapo_slik():
+    try:
+        with CLUE_IMAGE_MAP_FILE.open("r", encoding="utf-8") as datoteka:
+            return json.load(datoteka)
+    except (OSError, ValueError, TypeError):
+        return {}
+
+
+def _slika_za_namig(mapa_slik, geslo, opis):
+    ime = mapa_slik.get(_kljuc_slike(geslo, opis), "")
+    if not ime or Path(ime).name != ime:
+        return ""
+    return f"/static/Images/{ime}"
 
 
 def pridobi_podatke_as_dict(xml_path):
@@ -18,6 +55,7 @@ def pridobi_podatke_as_dict(xml_path):
         return 0, 0, [], {}, {}, []
 
     root = tree.getroot()
+    mapa_slik = _nalozi_mapo_slik()
 
     # poiščemo <rectangular-puzzle>
     rp = root.find(".//rp:rectangular-puzzle", NS_RP)
@@ -91,7 +129,19 @@ def pridobi_podatke_as_dict(xml_path):
 
     # ===== IZ ŠTEVILK V GRIDU IZPELJEMO ZAČETKE BESED (across & down) =====
     gesla_opisi = []
+    def geslo_iz_mreze(x0, y0, dx, dy):
+        crke = []
+        x1, y1 = x0, y0
 
+        while 0 <= x1 < width and 0 <= y1 < height and (x1, y1) not in black_set:
+            crka = sol_by_xy.get(f"{x1},{y1}", "")
+            if not crka:
+                return ""
+            crke.append(crka)
+            x1 += dx
+            y1 += dy
+
+        return "".join(crke)
     for key, num in numbers_xy.items():
         xs, ys = key.split(",")
         x = int(xs)
@@ -110,7 +160,12 @@ def pridobi_podatke_as_dict(xml_path):
                             "smer": "across",
                             "stevilka": num,
                             "opis": opis,
-                            "slika": "",
+                            "geslo": geslo_iz_mreze(x, y, 1, 0),
+                            "slika": _slika_za_namig(
+                                mapa_slik,
+                                geslo_iz_mreze(x, y, 1, 0),
+                                opis,
+                            ),
                         }
                     )
 
@@ -127,10 +182,14 @@ def pridobi_podatke_as_dict(xml_path):
                             "smer": "down",
                             "stevilka": num,
                             "opis": opis,
-                            "slika": "",
+                            "geslo": geslo_iz_mreze(x, y, 0, 1),
+                            "slika": _slika_za_namig(
+                                mapa_slik,
+                                geslo_iz_mreze(x, y, 0, 1),
+                                opis,
+                            ),
                         }
                     )
-
     return width, height, crna_polja, sol_by_xy, numbers_xy, gesla_opisi
 
 
