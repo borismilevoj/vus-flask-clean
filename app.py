@@ -1815,6 +1815,7 @@ def _save_as_webp(im: Image.Image, basename: str) -> tuple[Path, str]:
     static_rel = out_path.relative_to(Path("static")).as_posix()
     return out_path, url_for("static", filename=static_rel)
 
+
 import unicodedata
 import re
 from werkzeug.utils import secure_filename
@@ -1868,6 +1869,35 @@ def make_image_basename_from_opis(opis: str, dodatno: str = "") -> str:
 from pathlib import Path
 
 
+
+# VUS - potrjene povezave slik za krizanke
+def _normaliziraj_kljuc_slike(vrednost):
+    import re
+    import unicodedata
+    besedilo = " ".join(str(vrednost or "").split())
+    besedilo = unicodedata.normalize("NFD", besedilo)
+    besedilo = "".join(
+        znak for znak in besedilo
+        if not unicodedata.combining(znak)
+    )
+    return re.sub(r"[^a-z0-9]+", "_", besedilo.lower()).strip("_")
+
+
+def _kljuc_slike_za_namig(geslo, opis):
+    geslo_kljuc = _normaliziraj_kljuc_slike(geslo).replace("_", "")
+    return f"{geslo_kljuc}|{_normaliziraj_kljuc_slike(opis)}"
+
+
+def _nalozi_mapo_slik_za_namige():
+    import json
+    pot = Path(__file__).resolve().parent / "data" / "clue_image_map.json"
+    try:
+        with pot.open("r", encoding="utf-8") as datoteka:
+            podatki = json.load(datoteka)
+        return podatki if isinstance(podatki, dict) else {}
+    except (OSError, ValueError, TypeError):
+        return {}
+
 def image_url_for_clue(opis: str, dodatno: str = "", prefer_ext: str = ".jpg") -> str:
     """
     Bulletproof:
@@ -1883,6 +1913,17 @@ def image_url_for_clue(opis: str, dodatno: str = "", prefer_ext: str = ".jpg") -
 
     opis = (opis or "").strip()
     dodatno = (dodatno or "").strip()
+
+    # Najprej uporabi potrjeno povezavo gesla, opisa in slike.
+    if opis and dodatno:
+        mapa_slik = _nalozi_mapo_slik_za_namige()
+        kljuc = _kljuc_slike_za_namig(dodatno, opis)
+        ime_slike = mapa_slik.get(kljuc)
+
+        if isinstance(ime_slike, str) and ime_slike:
+            if Path(ime_slike).name == ime_slike:
+                if (images_dir / ime_slike).is_file():
+                    return f"/static/Images/{ime_slike}"
 
     # 1) kandidati slugov: novi + legacy (15)
     slugs = []
