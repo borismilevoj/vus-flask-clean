@@ -475,6 +475,38 @@ cellRefs[y][x] = cell;
       cellRefs[y][x] = cell;
     }
   }
+// ===== CRTKANA LOCILA VEČBESEDNIH GESEL =====
+(CC.vecbesedna_locila || []).forEach(function (l) {
+    var cell = (cellRefs[l.y] || [])[l.x];
+
+    if (!cell || cell.classList.contains('black')) return;
+
+    var crta = document.createElement('span');
+
+    Object.assign(crta.style, {
+        position: 'absolute',
+        pointerEvents: 'none',
+        zIndex: '5'
+    });
+
+    if (l.rob === 'right') {
+        Object.assign(crta.style, {
+            top: '0',
+            bottom: '0',
+            right: '-3px',
+            borderRight: '3px dashed #000'
+        });
+    } else if (l.rob === 'bottom') {
+        Object.assign(crta.style, {
+            left: '0',
+            right: '0',
+            bottom: '-3px',
+            borderBottom: '3px dashed #000'
+        });
+    }
+
+    cell.appendChild(crta);
+});
  // ===== SKRITI INPUT ZA MOBILNO TIPKOVNICO =====
 var mobileInput = document.createElement('input');
 mobileInput.type = 'text';
@@ -665,7 +697,7 @@ updateToggleButton();
     return s || 'slika';
   }
 
-  function showClueAtHead(x, y, d) {
+    function showClueAtHead(x, y, d) {
     var key = x + "," + y;
     var meta = (clueAtHead.get(key + "," + d)) || null;
 
@@ -682,10 +714,7 @@ updateToggleButton();
     if (!imgEl) return;
 
     var url = (meta && meta.slika) ? String(meta.slika).trim() : '';
-    if (!url && opis) url = '/static/Images/' + makeSlug(opis, 30) + '.jpg';
-
-    if (url && !/^https?:\/\//i.test(url) && !url.startsWith('/')) url = '/' + url;
-
+    if (!url && opis) url = '/static/Images/' + makeSlug(opis, 30) + '.jpg';    if (url && !/^https?:\/\//i.test(url) && !url.startsWith('/')) url = '/' + url;
     if (!url) {
       imgEl.removeAttribute('src');
       imgEl.style.display = 'none';
@@ -693,8 +722,15 @@ updateToggleButton();
       return;
     }
 
-    imgEl.onload = function () { imgEl.style.display = 'block'; imgEl.classList.remove('hidden'); };
-    imgEl.onerror = function () { imgEl.removeAttribute('src'); imgEl.style.display = 'none'; imgEl.classList.add('hidden'); };
+    imgEl.onload = function () {
+      imgEl.style.display = 'block';
+      imgEl.classList.remove('hidden');
+    };
+    imgEl.onerror = function () {
+      imgEl.removeAttribute('src');
+      imgEl.style.display = 'none';
+      imgEl.classList.add('hidden');
+    };
     imgEl.src = url;
   }
 

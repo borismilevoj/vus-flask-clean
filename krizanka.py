@@ -23,7 +23,7 @@ def _normaliziraj_kljuc(vrednost):
 
 
 def _kljuc_slike(geslo, opis):
-    geslo_kljuc = _normaliziraj_kljuc(geslo).replace("_", "")
+    geslo_kljuc = _normaliziraj_kljuc(geslo)
     return f"{geslo_kljuc}|{_normaliziraj_kljuc(opis)}"
 
 
@@ -36,9 +36,24 @@ def _nalozi_mapo_slik():
 
 
 def _slika_za_namig(mapa_slik, geslo, opis):
-    ime = mapa_slik.get(_kljuc_slike(geslo, opis), "")
+    kljuc = _kljuc_slike(geslo, opis)
+    ime = mapa_slik.get(kljuc, "")
+
+    if not ime:
+        geslo_kljuc, opis_kljuc = kljuc.split("|", 1)
+        kandidati = {
+            vrednost
+            for k, vrednost in mapa_slik.items()
+            if "|" in k
+            and k.split("|", 1)[1] == opis_kljuc
+            and k.split("|", 1)[0].replace("_", "") == geslo_kljuc.replace("_", "")
+        }
+        if len(kandidati) == 1:
+            ime = kandidati.pop()
+
     if not ime or Path(ime).name != ime:
         return ""
+
     return f"/static/Images/{ime}"
 
 
@@ -197,6 +212,56 @@ def pridyti_podatke_iz_xml_OLD(xml_path):
     """Stara funkcija – ne uporabljaj, samo za referenco."""
     return pridobi_podatke_as_dict(xml_path)
 
+def pridobi_vecbesedna_locila(xml_path):
+    locila = []
+
+    root = ET.parse(xml_path).getroot()
+
+    for word in root.iter():
+        if word.tag.split("}")[-1] != "word":
+            continue
+
+        deli = (word.get("solution") or "").split()
+
+        if len(deli) < 2:
+            continue
+
+        xs = (word.get("x") or "").split("-")
+        ys = (word.get("y") or "").split("-")
+
+        try:
+            x = int(xs[0]) - 1
+            y = int(ys[0]) - 1
+
+            dx = 1 if len(xs) == 2 else 0
+            dy = 1 if len(ys) == 2 else 0
+
+            if dx + dy != 1:
+                continue
+
+            dolzina = (
+                int(xs[-1]) - int(xs[0])
+                + int(ys[-1]) - int(ys[0]) + 1
+            )
+
+            if sum(len(del_) for del_ in deli) != dolzina:
+                continue
+
+        except (ValueError, IndexError):
+            continue
+
+        odmik = 0
+
+        for del_ in deli[:-1]:
+            odmik += len(del_)
+
+            locila.append({
+                "x": x + (odmik - 1) * dx,
+                "y": y + (odmik - 1) * dy,
+                "rob": "right" if dx else "bottom"
+            })
+
+    return locila
 
 def pridobi_podatke_iz_xml(xml_path):
     """
@@ -211,4 +276,5 @@ def pridobi_podatke_iz_xml(xml_path):
         "gesla_opisi": gesla,
         "sol_by_xy": sol_map,
         "numbers_xy": num_map,
+        "vecbesedna_locila": pridobi_vecbesedna_locila(xml_path),
     }
